@@ -2,7 +2,8 @@ import curses
 import unittest
 from unittest.mock import patch
 
-from synadm_tui.app import App
+from synadm_tui.app import App, WIZARD_BACK
+from synadm_tui.catalog import SECTIONS
 from synadm_tui.runner import Result, SynadmRunner
 
 
@@ -63,6 +64,18 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(
             self.app._pipx_remove_command("/usr/bin/pipx"),
             ["apt-get", "remove", "-y", "pipx"],
+        )
+
+    @patch("synadm_tui.app.App._prompt")
+    def test_command_assistant_can_return_to_previous_field(self, prompt) -> None:
+        prompt.side_effect = ["alice", WIZARD_BACK, "bob", "25"]
+        search = next(
+            command for section in SECTIONS for command in section.commands
+            if command.argv == ("user", "search")
+        )
+        self.assertEqual(
+            self.app._command_assistant(None, search),  # type: ignore[arg-type]
+            ["bob", "--limit", "25"],
         )
 
 

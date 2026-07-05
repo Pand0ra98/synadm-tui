@@ -13,12 +13,15 @@ import subprocess
 import threading
 import textwrap
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
 from .catalog import SECTIONS, Command
+from .command_help import command_info
 from .assistants import fields_for
+from .configuration import OUTPUT_FORMATS, SynadmConfig, backup_synadm_config, write_synadm_config
+from .edition import Edition, STANDARD_EDITION
 from .csv_import import (
     FIELDS,
     CsvData,
@@ -30,6 +33,162 @@ from .csv_import import (
 )
 from .file_browser import list_entries
 from .runner import Result, SynadmRunner, pretty_output
+from .terminal_image import (
+    kitty_delete_sequence,
+    kitty_render_sequence,
+    supports_kitty_graphics,
+    theme_image_path,
+    write_terminal_sequence,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class Theme:
+    key: str
+    name: str
+    badge: str
+    palette: tuple[tuple[int, int], ...]
+    art: tuple[str, ...]
+    ready_label: str
+
+
+THURINGIA_CREST = (
+    "      .-============-.",
+    "     /  *  *  *  *   \\",
+    "    |      /\\_/\\      |",
+    "    |  ___/ o o \\___   |",
+    "    | /   |==^==|   \\  |",
+    "    |     /|===|\\      |",
+    "     \\  *  *  *  *   /",
+    "      '============'",
+)
+
+CYBERSPACE_ART = (
+    "       /\\  /\\  /\\",
+    "  ____/  \\/  \\/  \\____",
+    " /   N E O N   G R I D    \\",
+    "|  +---+---+---+---+---+   |",
+    "| /___/___/___/___/___/|   |",
+    "|/___/___/___/___/___/ |   |",
+    "+------------------------+",
+)
+
+MATRIX_ART = (
+    "  01001 10110 00101 11001",
+    "   10110  THE MATRIX  011",
+    "  00101 10111 01010 10010",
+    "   11  FOLLOW THE WHITE 01",
+    "  010  RABBIT  101  00110",
+    "   10110 00101 11100 010",
+    "  00101 11010 01001 10111",
+)
+
+HACKER_ART = (
+    "  +------------------------+",
+    "  | root@synadm:~# ./tui  |",
+    "  | ACCESS: AUTHORIZED     |",
+    "  | CHANNEL: ENCRYPTED     |",
+    "  | TRACE:   DISABLED      |",
+    "  | _                      |",
+    "  +------------------------+",
+)
+
+ACCESSIBLE_ART = (
+    "  +========================+",
+    "  |   ACCESSIBLE CONSOLE   |",
+    "  |   HIGH CONTRAST MODE   |",
+    "  |   STATUS: READY        |",
+    "  +========================+",
+)
+
+THEMES = (
+    Theme(
+        "thuringia",
+        "Freistaat Thüringen",
+        "THÜRINGEN",
+        (
+            (curses.COLOR_RED, -1), (curses.COLOR_WHITE, curses.COLOR_RED),
+            (curses.COLOR_CYAN, -1), (curses.COLOR_RED, -1),
+            (curses.COLOR_YELLOW, -1), (curses.COLOR_WHITE, -1),
+            (curses.COLOR_BLUE, -1), (curses.COLOR_WHITE, curses.COLOR_BLUE),
+            (curses.COLOR_RED, curses.COLOR_WHITE),
+        ),
+        THURINGIA_CREST,
+        "FREISTAAT THÜRINGEN // SYSTEM BEREIT",
+    ),
+    Theme(
+        "cyberspace",
+        "Retro Cyberspace 198X",
+        "CYBERSPACE",
+        (
+            (curses.COLOR_MAGENTA, -1), (curses.COLOR_BLACK, curses.COLOR_MAGENTA),
+            (curses.COLOR_CYAN, -1), (curses.COLOR_RED, -1),
+            (curses.COLOR_YELLOW, -1), (curses.COLOR_WHITE, -1),
+            (curses.COLOR_CYAN, -1), (curses.COLOR_BLACK, curses.COLOR_MAGENTA),
+            (curses.COLOR_MAGENTA, curses.COLOR_WHITE),
+        ),
+        CYBERSPACE_ART,
+        "WELCOME TO CYBERSPACE // 198X ONLINE",
+    ),
+    Theme(
+        "matrix",
+        "Matrix",
+        "MATRIX",
+        (
+            (curses.COLOR_GREEN, -1), (curses.COLOR_BLACK, curses.COLOR_GREEN),
+            (curses.COLOR_GREEN, -1), (curses.COLOR_RED, -1),
+            (curses.COLOR_YELLOW, -1), (curses.COLOR_GREEN, -1),
+            (curses.COLOR_GREEN, -1), (curses.COLOR_BLACK, curses.COLOR_GREEN),
+            (curses.COLOR_GREEN, curses.COLOR_WHITE),
+        ),
+        MATRIX_ART,
+        "WAKE UP, ADMIN // THE MATRIX HAS YOU",
+    ),
+    Theme(
+        "hacker",
+        "Hacker Terminal",
+        "ROOT CONSOLE",
+        (
+            (curses.COLOR_YELLOW, -1), (curses.COLOR_BLACK, curses.COLOR_YELLOW),
+            (curses.COLOR_GREEN, -1), (curses.COLOR_RED, -1),
+            (curses.COLOR_CYAN, -1), (curses.COLOR_WHITE, -1),
+            (curses.COLOR_YELLOW, -1), (curses.COLOR_BLACK, curses.COLOR_YELLOW),
+            (curses.COLOR_YELLOW, curses.COLOR_WHITE),
+        ),
+        HACKER_ART,
+        "ROOT CONSOLE // SECURE SESSION READY",
+    ),
+    Theme(
+        "high-contrast",
+        "Hoher Kontrast",
+        "HIGH CONTRAST",
+        (
+            (curses.COLOR_WHITE, -1), (curses.COLOR_BLACK, curses.COLOR_WHITE),
+            (curses.COLOR_CYAN, -1), (curses.COLOR_RED, -1),
+            (curses.COLOR_YELLOW, -1), (curses.COLOR_WHITE, -1),
+            (curses.COLOR_WHITE, -1), (curses.COLOR_BLACK, curses.COLOR_WHITE),
+            (curses.COLOR_BLACK, curses.COLOR_WHITE),
+        ),
+        ACCESSIBLE_ART,
+        "HIGH CONTRAST // SYSTEM READY",
+    ),
+    Theme(
+        "monochrome",
+        "Monochrom",
+        "MONO CONSOLE",
+        (
+            (curses.COLOR_WHITE, -1), (curses.COLOR_BLACK, curses.COLOR_WHITE),
+            (curses.COLOR_WHITE, -1), (curses.COLOR_WHITE, -1),
+            (curses.COLOR_WHITE, -1), (curses.COLOR_WHITE, -1),
+            (curses.COLOR_WHITE, -1), (curses.COLOR_BLACK, curses.COLOR_WHITE),
+            (curses.COLOR_BLACK, curses.COLOR_WHITE),
+        ),
+        ACCESSIBLE_ART,
+        "MONOCHROME CONSOLE // SYSTEM READY",
+    ),
+)
+THEMES_BY_KEY = {theme.key: theme for theme in THEMES}
+WIZARD_BACK = object()
 
 
 @dataclass(slots=True)
@@ -47,8 +206,11 @@ class Activity:
 
 
 class App:
-    def __init__(self, runner: SynadmRunner) -> None:
+    def __init__(self, runner: SynadmRunner, edition: Edition = STANDARD_EDITION) -> None:
         self.runner = runner
+        self.edition = edition
+        self.available_themes = tuple(THEMES_BY_KEY[key] for key in edition.theme_keys)
+        self.theme = self._load_theme(edition)
         self.selection = Selection()
         self.focus = "sections"
         self.result: Result | None = None
@@ -62,12 +224,19 @@ class App:
         self.activities: list[Activity] = []
         self.pending_activity = ""
         self.recheck_server_after_result = False
+        self.show_command_details = False
+        self.config_test_pending = False
+        self.inline_images_supported = supports_kitty_graphics()
+        self.inline_image_signature: tuple[object, ...] | None = None
+        self.pending_inline_image: tuple[Path, int, int, int, int] | None = None
 
     def run(self) -> None:
         locale.setlocale(locale.LC_ALL, "")
         curses.wrapper(self._main)
 
     def _main(self, screen: curses.window) -> None:
+        if hasattr(curses, "set_escdelay"):
+            curses.set_escdelay(35)
         curses.curs_set(0)
         screen.keypad(True)
         screen.timeout(100)
@@ -79,24 +248,63 @@ class App:
             self._draw(screen)
             key = screen.getch()
             if key in (ord("q"), ord("Q")) and not self.running:
+                self._clear_inline_image()
                 return
             if key == curses.KEY_RESIZE or key == -1:
                 continue
             self._handle_key(screen, key)
 
-    @staticmethod
-    def _init_colors() -> None:
+    def _init_colors(self) -> None:
         if not curses.has_colors():
             return
         curses.start_color()
         curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_CYAN, -1)
-        curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_CYAN)
-        curses.init_pair(3, curses.COLOR_GREEN, -1)
-        curses.init_pair(4, curses.COLOR_RED, -1)
-        curses.init_pair(5, curses.COLOR_YELLOW, -1)
+        for pair_number, (foreground, background) in enumerate(self.theme.palette, start=1):
+            curses.init_pair(pair_number, foreground, background)
+
+    @staticmethod
+    def _theme_config_path(edition: Edition = STANDARD_EDITION) -> Path:
+        configured = os.environ.get("XDG_CONFIG_HOME")
+        base = Path(configured).expanduser() if configured else Path.home() / ".config"
+        return base / "synadm-tui" / f"theme-{edition.key}"
+
+    @classmethod
+    def _load_theme(cls, edition: Edition = STANDARD_EDITION) -> Theme:
+        try:
+            key = cls._theme_config_path(edition).read_text(encoding="utf-8").strip()
+        except OSError:
+            key = edition.default_theme
+        if key not in edition.theme_keys:
+            key = edition.default_theme
+        return THEMES_BY_KEY[key]
+
+    @classmethod
+    def _save_theme(cls, theme: Theme, edition: Edition = STANDARD_EDITION) -> bool:
+        path = cls._theme_config_path(edition)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(theme.key + "\n", encoding="utf-8")
+        except OSError:
+            return False
+        return True
 
     def _handle_key(self, screen: curses.window, key: int) -> None:
+        if not self.running and key in (ord("?"),):
+            self._clear_inline_image()
+            self._show_keyboard_help(screen)
+            return
+        if not self.running and key in (ord("c"), ord("C")):
+            self._clear_inline_image()
+            self._configure_synadm(screen)
+            return
+        if not self.running and key in (ord("f"), ord("F")):
+            self._clear_inline_image()
+            self._command_palette(screen)
+            return
+        if not self.running and key in (ord("t"), ord("T")):
+            self._clear_inline_image()
+            self._choose_theme(screen)
+            return
         if not self.running and key in (ord("i"), ord("I")):
             self._select_command("Benutzer", "Benutzer aus CSV importieren")
             self._prepare_command(screen)
@@ -118,15 +326,19 @@ class App:
                 self.selection.command = 0
             elif key in (10, 13, curses.KEY_ENTER, curses.KEY_RIGHT, ord("l"), 9):
                 self.focus = "commands"
+                self.show_command_details = True
             return
         if key in (curses.KEY_LEFT, ord("h"), 27):
             self.focus = "sections"
+            self.show_command_details = False
         elif key in (curses.KEY_UP, ord("k")):
             commands = SECTIONS[self.selection.section].commands
             self.selection.command = (self.selection.command - 1) % len(commands)
+            self.show_command_details = True
         elif key in (curses.KEY_DOWN, ord("j")):
             commands = SECTIONS[self.selection.section].commands
             self.selection.command = (self.selection.command + 1) % len(commands)
+            self.show_command_details = True
         elif key == curses.KEY_PPAGE:
             self.selection.output_offset = max(0, self.selection.output_offset - 10)
         elif key == curses.KEY_NPAGE:
@@ -141,6 +353,7 @@ class App:
             self.selection.output_offset = 0
 
     def _prepare_command(self, screen: curses.window) -> None:
+        self._clear_inline_image()
         spec = self.current_command
         if spec.action == "csv_import":
             self._csv_import_wizard(screen)
@@ -153,6 +366,12 @@ class App:
             return
         if spec.action == "uninstall_pipx":
             self._uninstall_pipx(screen)
+            return
+        if spec.action == "choose_theme":
+            self._choose_theme(screen)
+            return
+        if spec.action == "configure_synadm":
+            self._configure_synadm(screen)
             return
         extra_args = self._command_assistant(screen, spec)
         if extra_args is None:
@@ -170,22 +389,32 @@ class App:
         fields = fields_for(spec.argv, spec.hint)
         if not fields:
             return []
-        collected: list[str] = []
         total = len(fields)
-        for index, field in enumerate(fields, start=1):
-            while True:
-                value = self._prompt(
-                    screen,
-                    f"{spec.title} · {index}/{total}",
-                    f"{field.label}: {field.hint}",
-                    secret=field.secret,
-                )
-                if value is None:
-                    self.status = "Assistent abgebrochen"
-                    return None
-                if value.strip() or not field.required:
-                    break
+        values = [""] * total
+        index = 0
+        while index < total:
+            field = fields[index]
+            value = self._prompt(
+                screen,
+                f"{spec.title} · {index + 1}/{total}",
+                f"{field.label}: {field.hint}",
+                initial=values[index],
+                secret=field.secret,
+            )
+            if value is WIZARD_BACK:
+                index = max(0, index - 1)
+                continue
+            if value is None:
+                self.status = "Assistent abgebrochen"
+                return None
+            if not value.strip() and field.required:
                 self.status = f"{field.label} ist erforderlich"
+                continue
+            values[index] = value
+            index += 1
+
+        collected: list[str] = []
+        for field, value in zip(fields, values):
             if not value.strip():
                 continue
             if field.raw:
@@ -211,6 +440,7 @@ class App:
         self.status = "Befehl läuft …"
         self.pending_activity = " ".join(args[:3])
         self.selection.output_offset = 0
+        self.show_command_details = False
 
         def work() -> None:
             self.events.put(self.runner.run(args, structured="--help" not in args and "-h" not in args))
@@ -374,47 +604,238 @@ class App:
             return [*prefix, "pacman", "-R", "--noconfirm", "pipx"]
         return None
 
-    def _csv_import_wizard(self, screen: curses.window) -> None:
-        path = self._choose_csv_file(screen)
-        if not path:
-            self.status = "CSV-Import abgebrochen"
+    def _configure_synadm(self, screen: curses.window) -> None:
+        if not self.runner.available:
+            self.status = "synadm wurde nicht gefunden"
+            self.output = "Bitte zuerst unter Weitere → synadm installieren/aktualisieren installieren."
             return
-        try:
-            detected = inspect_csv(path, has_header=False)
-        except CsvImportError as error:
-            self._show_error(str(error))
-            return
-        delimiter = self._choose_delimiter(screen, detected.delimiter)
-        if delimiter is None:
-            self.status = "CSV-Import abgebrochen"
-            return
-        has_header = self._ask_yes_no(
-            screen,
-            "CSV-Import · Kopfzeile",
-            "Enthält die erste Zeile Spaltennamen?",
-            default=True,
+        values: dict[str, object] = {
+            "path": self.runner.config_file or "~/.config/synadm.yaml",
+            "user": "", "token": "", "protocol": "http",
+            "base_url": "http://localhost:8008", "admin_path": "/_synapse/admin",
+            "matrix_path": "/_matrix", "homeserver": "auto-retrieval",
+            "discovery": "well-known", "format": "yaml", "timeout": "30",
+            "ssl_verify": True,
+        }
+        steps = (
+            ("path", "Pfad der Konfigurationsdatei"),
+            ("user", "Matrix-Admin, z. B. @admin:example.org"),
+            ("token", "Admin-Zugriffstoken (verdeckt)"),
+            ("protocol", "Verbindungsart"),
+            ("base_url", "Synapse-Basis-URL oder absoluter Socket-Pfad"),
+            ("admin_path", "Synapse Admin API-Pfad"),
+            ("matrix_path", "Matrix API-Pfad"),
+            ("homeserver", "Homeserver-Domain oder auto-retrieval"),
+            ("discovery", "Homeserver-Erkennung"),
+            ("format", "Standard-Ausgabeformat"),
+            ("timeout", "HTTP-Timeout in Sekunden"),
+            ("ssl_verify", "TLS-Zertifikate prüfen?"),
         )
-        if has_header is None:
-            self.status = "CSV-Import abgebrochen"
-            return
+        index = 0
+        while index < len(steps):
+            key, hint = steps[index]
+            title = f"synadm-Einrichtung · {index + 1}/{len(steps)}"
+            if key == "protocol":
+                result: object = self._select_dialog_option(
+                    screen, title, hint,
+                    (("HTTP / HTTPS", "http"), ("Unix-Socket", "unix")),
+                    str(values[key]),
+                )
+            elif key == "discovery":
+                result = self._select_dialog_option(
+                    screen, title, hint,
+                    (("Well-known", "well-known"), ("DNS SRV", "dns")),
+                    str(values[key]),
+                )
+            elif key == "format":
+                result = self._select_dialog_option(
+                    screen, title, hint,
+                    tuple((name.upper(), name) for name in OUTPUT_FORMATS),
+                    str(values[key]),
+                )
+            elif key == "ssl_verify":
+                if values["protocol"] == "unix":
+                    values[key] = True
+                    index += 1
+                    continue
+                result = self._dialog_yes_no(
+                    screen, title,
+                    "Bei selbstsignierten Zertifikaten kann Nein erforderlich sein.",
+                    default=bool(values[key]),
+                )
+            else:
+                result = self._prompt(
+                    screen, title, hint, initial=str(values[key]), secret=key == "token",
+                )
+            if result is WIZARD_BACK:
+                index = max(0, index - 1)
+                continue
+            if result is None:
+                self.status = "Erstkonfiguration abgebrochen"
+                return
+            if isinstance(result, str) and not result.strip():
+                self.status = "Dieses Feld ist erforderlich"
+                continue
+            if key == "timeout":
+                try:
+                    if int(str(result)) < 1:
+                        raise ValueError
+                except ValueError:
+                    self.status = "Bitte eine positive ganze Zahl eingeben"
+                    continue
+            values[key] = result
+            if key == "protocol" and result == "unix" and values["base_url"] == "http://localhost:8008":
+                values["base_url"] = "/run/matrix-synapse/synapse.sock"
+            elif key == "protocol" and result == "http" and str(values["base_url"]).startswith("/"):
+                values["base_url"] = "http://localhost:8008"
+            index += 1
+
+        path = Path(str(values["path"])).expanduser()
+        config = SynadmConfig(
+            user=str(values["user"]), token=str(values["token"]),
+            protocol=str(values["protocol"]), base_url=str(values["base_url"]),
+            admin_path=str(values["admin_path"]), matrix_path=str(values["matrix_path"]),
+            format=str(values["format"]), timeout=int(str(values["timeout"])),
+            server_discovery=str(values["discovery"]), homeserver=str(values["homeserver"]),
+            ssl_verify=bool(values["ssl_verify"]),
+        )
         try:
-            data = inspect_csv(path, delimiter, has_header=has_header)
-        except CsvImportError as error:
-            self._show_error(str(error))
+            config.validate()
+        except ValueError as error:
+            self.status = "Konfiguration ist ungültig"
+            self.output = str(error)
             return
-        mapping = self._map_csv_columns(screen, data)
-        if mapping is None:
-            self.status = "CSV-Import abgebrochen"
+        confirmation = self._confirm_synadm_config(screen, path, config)
+        while confirmation is WIZARD_BACK:
+            if config.protocol == "http":
+                previous = self._dialog_yes_no(
+                    screen, "synadm-Einrichtung · 12/12",
+                    "TLS-Zertifikate prüfen?", default=config.ssl_verify,
+                )
+                if previous is None:
+                    self.status = "Erstkonfiguration abgebrochen"
+                    return
+                if previous is WIZARD_BACK:
+                    continue
+                config = replace(config, ssl_verify=bool(previous))
+            else:
+                previous_timeout = self._prompt(
+                    screen, "synadm-Einrichtung · 11/12",
+                    "HTTP-Timeout in Sekunden", initial=str(config.timeout),
+                )
+                if previous_timeout is None:
+                    self.status = "Erstkonfiguration abgebrochen"
+                    return
+                if previous_timeout is WIZARD_BACK:
+                    continue
+                try:
+                    parsed_timeout = int(previous_timeout)
+                    if parsed_timeout < 1:
+                        raise ValueError
+                except ValueError:
+                    self.status = "Bitte eine positive ganze Zahl eingeben"
+                    continue
+                config = replace(config, timeout=parsed_timeout)
+            confirmation = self._confirm_synadm_config(screen, path, config)
+        if not confirmation:
+            self.status = "Erstkonfiguration abgebrochen"
             return
+        backup: Path | None = None
+        if path.exists():
+            overwrite = self._dialog_yes_no(screen, "Vorhandene Konfiguration", f"{path} sichern und überschreiben?", default=False)
+            if not overwrite or overwrite is WIZARD_BACK:
+                self.status = "Vorhandene Konfiguration wurde nicht verändert"
+                return
+            try:
+                backup = backup_synadm_config(path)
+            except OSError as error:
+                self.status = "Sicherung der Konfiguration fehlgeschlagen"
+                self.output = str(error)
+                return
         try:
-            entries = build_entries(data, mapping)
-        except CsvImportError as error:
-            self._show_error(str(error))
+            write_synadm_config(path, config)
+        except OSError as error:
+            self.status = "Konfiguration konnte nicht gespeichert werden"
+            self.output = str(error)
             return
-        if not self._confirm_csv_import(screen, data, entries, mapping):
-            self.status = "CSV-Import abgebrochen"
-            return
-        self._launch_csv_import(entries, data.path.name)
+        self.runner.config_file = str(path)
+        self.status = "Konfiguration sicher gespeichert · Verbindung wird geprüft"
+        backup_line = f"\nSicherung: {backup}" if backup else ""
+        self.output = f"Konfiguration: {path}\nDateirechte: 0600{backup_line}\n\n{config.public_summary()}"
+        self.selection.output_offset = 0
+        self.config_test_pending = True
+        self._start_server_check()
+
+    def _csv_import_wizard(self, screen: curses.window) -> None:
+        step = 0
+        path: str | None = None
+        delimiter = ";"
+        has_header = True
+        data: CsvData | None = None
+        mapping: dict[str, int | None] | None = None
+        while True:
+            if step == 0:
+                path = self._choose_csv_file(screen)
+                if not path:
+                    self.status = "CSV-Import abgebrochen"
+                    return
+                try:
+                    detected = inspect_csv(path, has_header=False)
+                except CsvImportError as error:
+                    self._show_error(str(error))
+                    return
+                delimiter = detected.delimiter
+                step = 1
+            elif step == 1:
+                chosen = self._choose_delimiter(screen, delimiter)
+                if chosen is WIZARD_BACK:
+                    step = 0
+                    continue
+                if chosen is None:
+                    self.status = "CSV-Import abgebrochen"
+                    return
+                delimiter = chosen
+                header_answer = self._ask_yes_no(
+                    screen, "CSV-Import · Kopfzeile",
+                    "Enthält die erste Zeile Spaltennamen?", default=has_header,
+                )
+                if header_answer is WIZARD_BACK:
+                    continue
+                if header_answer is None:
+                    self.status = "CSV-Import abgebrochen"
+                    return
+                has_header = header_answer
+                try:
+                    data = inspect_csv(path, delimiter, has_header=has_header)
+                except CsvImportError as error:
+                    self._show_error(str(error))
+                    return
+                step = 2
+            elif step == 2 and data is not None:
+                mapped = self._map_csv_columns(screen, data, initial=mapping)
+                if mapped is WIZARD_BACK:
+                    step = 1
+                    continue
+                if mapped is None:
+                    self.status = "CSV-Import abgebrochen"
+                    return
+                mapping = mapped
+                step = 3
+            elif step == 3 and data is not None and mapping is not None:
+                try:
+                    entries = build_entries(data, mapping)
+                except CsvImportError as error:
+                    self._show_error(str(error))
+                    return
+                confirmed = self._confirm_csv_import(screen, data, entries, mapping)
+                if confirmed is WIZARD_BACK:
+                    step = 2
+                    continue
+                if not confirmed:
+                    self.status = "CSV-Import abgebrochen"
+                    return
+                self._launch_csv_import(entries, data.path.name)
+                return
 
     def _launch_csv_import(self, entries: tuple[ImportEntry, ...], filename: str) -> None:
         self.running = True
@@ -532,6 +953,8 @@ class App:
                     "Absoluter oder relativer Pfad",
                     initial=str(directory) + os.sep,
                 )
+                if manual is WIZARD_BACK:
+                    continue
                 if manual:
                     candidate = Path(manual).expanduser()
                     if candidate.is_dir():
@@ -589,6 +1012,11 @@ class App:
             return
         if not result.ok:
             self.server_state = "Nicht erreichbar"
+            if self.config_test_pending:
+                diagnostic = result.stderr.strip() or result.stdout.strip() or "Keine Fehlerdetails verfügbar."
+                self.output += "\n\nVERBINDUNGSTEST: FEHLGESCHLAGEN\n" + diagnostic
+                self.status = "Konfiguration gespeichert · Verbindungstest fehlgeschlagen"
+                self.config_test_pending = False
             return
         self.server_state = "Verbunden"
         try:
@@ -596,6 +1024,10 @@ class App:
             self.server_version = str(payload.get("server_version", "—"))
         except (json.JSONDecodeError, AttributeError, TypeError):
             self.server_version = "erkannt"
+        if self.config_test_pending:
+            self.output += f"\n\nVERBINDUNGSTEST: ERFOLGREICH\nSynapse-Version: {self.server_version}"
+            self.status = "Konfiguration gespeichert und erfolgreich geprüft"
+            self.config_test_pending = False
 
     def _select_command(self, section_title: str, command_title: str) -> None:
         for section_index, section in enumerate(SECTIONS):
@@ -615,18 +1047,22 @@ class App:
 
     def _draw(self, screen: curses.window) -> None:
         screen.erase()
+        self.pending_inline_image = None
         height, width = screen.getmaxyx()
         if height < 22 or width < 90:
             self._safe_add(screen, 0, 0, "Terminal zu klein – mindestens 90 × 22 Zeichen benötigt.", curses.A_BOLD)
             self._safe_add(screen, 2, 0, f"Aktuell: {width} × {height}. Mit q beenden.")
             screen.refresh()
+            self._sync_inline_image()
             return
 
-        self._safe_add(screen, 0, 1, "synadm TUI", curses.A_BOLD | self._color(1))
-        connection_color = self._color(3) if self.server_state == "Verbunden" else self._color(5)
+        self._safe_add(screen, 0, 0, " " * (width - 1), self._color(8))
+        brand = "S Y N A D M  //  T U I"
+        self._safe_add(screen, 0, max(1, (width - len(brand)) // 2), brand, curses.A_BOLD | self._color(8))
+        self._safe_add(screen, 0, 2, self.theme.badge, curses.A_BOLD | self._color(8))
         connection = f"● {self.server_state}"
-        self._safe_add(screen, 0, width - len(connection) - 2, connection, curses.A_BOLD | connection_color)
-        screen.hline(1, 0, curses.ACS_HLINE, width)
+        self._safe_add(screen, 0, width - len(connection) - 2, connection, curses.A_BOLD | self._color(8))
+        self._safe_add(screen, 1, 0, "═" * (width - 1), curses.A_BOLD | self._color(1))
 
         body_y = 2
         body_height = height - 4
@@ -649,10 +1085,11 @@ class App:
         self._draw_output(screen, body_y, output_x, output_width, details_height)
         self._draw_activity(screen, body_y + details_height, output_x, output_width, activity_height)
 
-        screen.hline(height - 2, 0, curses.ACS_HLINE, width)
-        footer = "↑/↓ wählen   Enter öffnen   / suchen   n neu   i CSV-Import   ← zurück   q Ende"
+        self._safe_add(screen, height - 2, 0, "═" * (width - 1), curses.A_BOLD | self._color(1))
+        footer = f"{self.edition.name} · {self.theme.name}  │  ? Hilfe  t Thema  ↑/↓ wählen  Enter öffnen  q Ende"
         self._safe_add(screen, height - 1, 2, footer[: width - 4], curses.A_DIM)
         screen.refresh()
+        self._sync_inline_image()
 
     def _draw_sections(self, screen: curses.window, y: int, x: int, width: int, height: int) -> None:
         self._draw_box(screen, y, x, height, width, "Bereiche", self.focus == "sections")
@@ -672,7 +1109,8 @@ class App:
             selected = index == self.selection.command
             active = selected and self.focus == "commands"
             attr = self._color(2) | curses.A_BOLD if active else (self._color(5) if command.dangerous else 0)
-            marker = "! " if command.dangerous else "  "
+            info = command_info(command)
+            marker = "! " if command.dangerous else ("+ " if info.writes else "· ")
             self._safe_add(screen, y + 2 + index, x + 2, (marker + command.title)[: width - 4], attr)
         spec = self.current_command
         if spec.hint:
@@ -683,6 +1121,36 @@ class App:
         if self.result:
             title += "  ✓" if self.result.ok else "  ✗"
         self._draw_box(screen, y, x, height, width, title, False)
+        if self.show_command_details:
+            self._draw_command_details(screen, y, x, width, height)
+            return
+        if self.result is None and self.output.startswith("Bereit."):
+            image_path = theme_image_path(self.theme.key)
+            if (
+                image_path is not None
+                and self.inline_images_supported
+                and image_path.is_file()
+            ):
+                image_rows = max(4, min(10, height - 4))
+                image_columns = max(7, min(width - 4, round(image_rows * 1.73)))
+                image_x = x + max(2, (width - image_columns) // 2)
+                self.pending_inline_image = (image_path, y + 3, image_x + 1, image_rows, image_columns)
+                label = self.theme.ready_label
+                self._safe_add(
+                    screen, min(y + height - 2, y + 3 + image_rows),
+                    x + max(2, (width - len(label)) // 2), label[: width - 4],
+                    curses.A_BOLD | self._color(1),
+                )
+                return
+            crest_width = max(len(line) for line in self.theme.art)
+            crest_x = x + max(2, (width - crest_width) // 2)
+            for line_no, line in enumerate(self.theme.art[: max(0, height - 4)]):
+                color = self._color(1) if line_no % 3 else self._color(7)
+                self._safe_add(screen, y + 2 + line_no, crest_x, line[: width - 4], curses.A_BOLD | color)
+            label_y = y + 2 + min(len(self.theme.art), max(0, height - 4))
+            label = self.theme.ready_label
+            self._safe_add(screen, label_y, x + max(2, (width - len(label)) // 2), label[: width - 4], curses.A_BOLD | self._color(1))
+            return
         lines: list[str] = []
         for raw_line in self.output.expandtabs(4).splitlines() or [""]:
             lines.extend(textwrap.wrap(raw_line, max(1, width - 4), replace_whitespace=False, drop_whitespace=False) or [""])
@@ -694,6 +1162,50 @@ class App:
         if max_offset:
             indicator = f"{self.selection.output_offset + 1}–{min(len(lines), self.selection.output_offset + len(visible))}/{len(lines)}"
             self._safe_add(screen, y, x + width - len(indicator) - 2, indicator, curses.A_DIM)
+
+    def _sync_inline_image(self) -> None:
+        if self.pending_inline_image is None:
+            self._clear_inline_image()
+            return
+        path, row, column, rows, columns = self.pending_inline_image
+        signature = (path, row, column, rows, columns)
+        if signature == self.inline_image_signature:
+            return
+        try:
+            sequence = kitty_render_sequence(path.read_bytes(), row, column, rows, columns)
+            write_terminal_sequence(sequence)
+        except OSError:
+            self.inline_images_supported = False
+            self.inline_image_signature = None
+            return
+        self.inline_image_signature = signature
+
+    def _clear_inline_image(self) -> None:
+        if self.inline_image_signature is None:
+            return
+        try:
+            write_terminal_sequence(kitty_delete_sequence())
+        except OSError:
+            pass
+        self.inline_image_signature = None
+
+    def _draw_command_details(self, screen: curses.window, y: int, x: int, width: int, height: int) -> None:
+        spec = self.current_command
+        info = command_info(spec)
+        access = "SCHREIBEND" if info.writes else "LESEND"
+        access_attr = self._color(5) if info.writes else self._color(3)
+        self._safe_add(screen, y + 2, x + 2, f"ZUGRIFF: {access}", curses.A_BOLD | access_attr)
+        lines: list[tuple[str, int]] = []
+        for line in textwrap.wrap(info.description, max(1, width - 4)):
+            lines.append((line, 0))
+        lines.append(("", 0))
+        lines.append(("BEISPIEL", curses.A_BOLD | self._color(1)))
+        for line in textwrap.wrap(info.example, max(1, width - 4), replace_whitespace=False):
+            lines.append((line, curses.A_DIM))
+        if spec.dangerous:
+            lines.extend((("", 0), ("! Zusätzliche Sicherheitsbestätigung erforderlich", curses.A_BOLD | self._color(4))))
+        for index, (line, attr) in enumerate(lines[: max(0, height - 5)]):
+            self._safe_add(screen, y + 4 + index, x + 2, line[: width - 4], attr)
 
     def _draw_server_panel(self, screen: curses.window, y: int, x: int, width: int, height: int) -> None:
         self._draw_box(screen, y, x, height, width, "Server", False)
@@ -737,19 +1249,294 @@ class App:
     ) -> None:
         if height < 2 or width < 4:
             return
-        attr = self._color(1) | curses.A_BOLD if active else curses.A_DIM
+        attr = self._color(1) | curses.A_BOLD if active else self._color(7) | curses.A_BOLD
+        self._draw_frame(screen, y, x, height, width, attr)
+        rendered_title = f"[ {title.upper()} ]"
+        title_x = x + max(2, (width - len(rendered_title)) // 2)
+        self._safe_add(screen, y, title_x, rendered_title[: width - 4], curses.A_BOLD | self._color(1))
+
+    @staticmethod
+    def _draw_frame(
+        window: curses.window,
+        y: int,
+        x: int,
+        height: int,
+        width: int,
+        attr: int,
+    ) -> None:
+        """Draw a double-line frame, with an ACS fallback for limited terminals."""
+        if height < 2 or width < 4:
+            return
         try:
-            screen.hline(y, x + 1, curses.ACS_HLINE, width - 2, attr)
-            screen.hline(y + height - 1, x + 1, curses.ACS_HLINE, width - 2, attr)
-            screen.vline(y + 1, x, curses.ACS_VLINE, height - 2, attr)
-            screen.vline(y + 1, x + width - 1, curses.ACS_VLINE, height - 2, attr)
-            screen.addch(y, x, curses.ACS_ULCORNER, attr)
-            screen.addch(y, x + width - 1, curses.ACS_URCORNER, attr)
-            screen.addch(y + height - 1, x, curses.ACS_LLCORNER, attr)
-            screen.addch(y + height - 1, x + width - 1, curses.ACS_LRCORNER, attr)
+            window.addstr(y, x, "╔" + "═" * (width - 2) + "╗", attr)
+            for row in range(y + 1, y + height - 1):
+                window.addstr(row, x, "║", attr)
+                window.addstr(row, x + width - 1, "║", attr)
+        except curses.error:
+            try:
+                window.hline(y, x + 1, curses.ACS_HLINE, width - 2, attr)
+                window.hline(y + height - 1, x + 1, curses.ACS_HLINE, width - 2, attr)
+                window.vline(y + 1, x, curses.ACS_VLINE, height - 2, attr)
+                window.vline(y + 1, x + width - 1, curses.ACS_VLINE, height - 2, attr)
+                window.addch(y, x, curses.ACS_ULCORNER, attr)
+                window.addch(y, x + width - 1, curses.ACS_URCORNER, attr)
+                window.addch(y + height - 1, x, curses.ACS_LLCORNER, attr)
+                window.addch(y + height - 1, x + width - 1, curses.ACS_LRCORNER, attr)
+            except curses.error:
+                pass
+            return
+        # curses reports ERR after successfully painting the bottom-right cell
+        # of a subwindow. Keep the Unicode frame instead of replacing it.
+        try:
+            window.addstr(y + height - 1, x, "╚" + "═" * (width - 2) + "╝", attr)
         except curses.error:
             pass
-        self._safe_add(screen, y, x + 2, f" {title} ", curses.A_BOLD | self._color(1))
+
+    def _draw_dialog_frame(self, window: curses.window) -> None:
+        height, width = window.getmaxyx()
+        self._draw_frame(window, 0, 0, height, width, curses.A_BOLD | self._color(1))
+
+    def _draw_dialog_heading(self, window: curses.window, title: str, attr: int) -> None:
+        _height, width = window.getmaxyx()
+        rendered = f"[ {title.upper()} ]"
+        self._safe_add(window, 1, max(2, (width - len(rendered)) // 2), rendered[: width - 4], attr)
+
+    def _choose_theme(self, screen: curses.window) -> None:
+        original = self.theme
+        selected = next((index for index, theme in enumerate(self.available_themes) if theme.key == original.key), 0)
+        height, width = screen.getmaxyx()
+        box_width = min(width - 4, 64)
+        box_height = 11
+        window = curses.newwin(box_height, box_width, (height - box_height) // 2, (width - box_width) // 2)
+        window.keypad(True)
+        while True:
+            window.erase()
+            self._draw_dialog_frame(window)
+            self._draw_dialog_heading(window, "Thema auswählen", curses.A_BOLD | self._color(1))
+            self._safe_add(window, 2, 3, "Farben mit ↑/↓ live ansehen:", curses.A_DIM)
+            for index, theme in enumerate(self.available_themes):
+                active = index == selected
+                marker = "▶" if active else " "
+                attr = curses.A_BOLD | self._color(2) if active else curses.A_NORMAL
+                self._safe_add(window, 4 + index, 4, f"{marker} {theme.name}"[: box_width - 8], attr)
+            self._safe_add(window, box_height - 2, 3, "Enter speichern · Esc zurück · t öffnet die Auswahl", curses.A_DIM)
+            window.refresh()
+            key = window.getch()
+            if key in (curses.KEY_UP, ord("k")):
+                selected = (selected - 1) % len(self.available_themes)
+                self.theme = self.available_themes[selected]
+                self._init_colors()
+            elif key in (curses.KEY_DOWN, ord("j")):
+                selected = (selected + 1) % len(self.available_themes)
+                self.theme = self.available_themes[selected]
+                self._init_colors()
+            elif key in (10, 13, curses.KEY_ENTER):
+                self.theme = self.available_themes[selected]
+                saved = self._save_theme(self.theme, self.edition)
+                self.status = f"Thema aktiv: {self.theme.name}"
+                if not saved:
+                    self.status += " (konnte nicht gespeichert werden)"
+                return
+            elif key == 27:
+                self.theme = original
+                self._init_colors()
+                self.status = "Themenauswahl abgebrochen"
+                return
+
+    def _show_keyboard_help(self, screen: curses.window) -> None:
+        height, width = screen.getmaxyx()
+        box_width = min(width - 4, 78)
+        box_height = 17
+        window = curses.newwin(box_height, box_width, (height - box_height) // 2, (width - box_width) // 2)
+        window.keypad(True)
+        entries = (
+            ("↑/↓ · j/k", "Auswahl bewegen"),
+            ("Enter · →", "Bereich öffnen / Aktion starten"),
+            ("← · Esc", "Zur Bereichsauswahl / Dialog abbrechen"),
+            ("Shift+Tab", "Im Assistenten einen Schritt zurück"),
+            ("f", "Befehle über alle Bereiche filtern"),
+            ("c", "synadm-Konfigurationsassistent"),
+            ("t", "Thema auswählen"),
+            ("n · i · /", "Benutzer neu · CSV-Import · Benutzersuche"),
+            ("PgUp/PgDn", "Ausgabe scrollen"),
+            ("q", "Programm beenden"),
+        )
+        window.erase()
+        self._draw_dialog_frame(window)
+        self._draw_dialog_heading(window, "Tastaturhilfe", curses.A_BOLD | self._color(1))
+        for index, (keys, meaning) in enumerate(entries):
+            self._safe_add(window, 3 + index, 4, f"{keys:<16}", curses.A_BOLD | self._color(1))
+            self._safe_add(window, 3 + index, 22, meaning[: box_width - 25])
+        self._safe_add(window, box_height - 2, 4, "Beliebige Taste schließt die Hilfe", curses.A_DIM)
+        window.refresh()
+        window.getch()
+
+    def _command_palette(self, screen: curses.window) -> None:
+        height, width = screen.getmaxyx()
+        box_width = min(width - 4, 86)
+        box_height = min(height - 4, 20)
+        window = curses.newwin(box_height, box_width, (height - box_height) // 2, (width - box_width) // 2)
+        window.keypad(True)
+        query: list[str] = []
+        selected = 0
+        while True:
+            needle = "".join(query).casefold()
+            matches = [
+                (section_index, command_index, section.title, command)
+                for section_index, section in enumerate(SECTIONS)
+                for command_index, command in enumerate(section.commands)
+                if not needle or needle in f"{section.title} {command.title} {command.hint}".casefold()
+            ]
+            selected = min(selected, max(0, len(matches) - 1))
+            window.erase()
+            self._draw_dialog_frame(window)
+            self._draw_dialog_heading(window, "Befehlsfilter", curses.A_BOLD | self._color(1))
+            self._safe_add(window, 2, 3, "Suche: " + "".join(query), curses.A_BOLD)
+            max_rows = box_height - 6
+            offset = max(0, selected - max_rows + 1)
+            for row, (_si, _ci, section_title, command) in enumerate(matches[offset : offset + max_rows]):
+                absolute = offset + row
+                info = command_info(command)
+                mode = "S" if info.writes else "L"
+                text = f"[{mode}] {section_title:<15} {command.title}"
+                attr = curses.A_BOLD | self._color(2) if absolute == selected else curses.A_NORMAL
+                self._safe_add(window, 4 + row, 3, text[: box_width - 6], attr)
+            if not matches:
+                self._safe_add(window, 5, 3, "Keine passenden Befehle", self._color(5))
+            self._safe_add(window, box_height - 2, 3, "Tippen · ↑/↓ wählen · Enter öffnen · Esc abbrechen", curses.A_DIM)
+            window.refresh()
+            key = window.get_wch()
+            if key in ("\n", "\r", curses.KEY_ENTER) and matches:
+                section_index, command_index, _section, _command = matches[selected]
+                self.selection.section = section_index
+                self.selection.command = command_index
+                self.focus = "commands"
+                self.show_command_details = True
+                self.status = "Befehl aus Filter ausgewählt"
+                return
+            if key in (curses.KEY_UP, "\x10") and matches:
+                selected = (selected - 1) % len(matches)
+            elif key in (curses.KEY_DOWN, "\x0e") and matches:
+                selected = (selected + 1) % len(matches)
+            elif key in (curses.KEY_BACKSPACE, "\b", "\x7f"):
+                if query:
+                    query.pop()
+                    selected = 0
+            elif key == "\x1b":
+                return
+            elif isinstance(key, str) and key.isprintable():
+                query.append(key)
+                selected = 0
+
+    def _select_dialog_option(
+        self,
+        screen: curses.window,
+        title: str,
+        prompt: str,
+        options: tuple[tuple[str, str], ...],
+        current: str,
+    ) -> str | None | object:
+        selected = next((index for index, (_label, value) in enumerate(options) if value == current), 0)
+        height, width = screen.getmaxyx()
+        box_width = min(width - 4, 64)
+        box_height = max(9, len(options) + 7)
+        window = curses.newwin(box_height, box_width, (height - box_height) // 2, (width - box_width) // 2)
+        window.keypad(True)
+        while True:
+            window.erase()
+            self._draw_dialog_frame(window)
+            self._draw_dialog_heading(window, title, curses.A_BOLD | self._color(1))
+            self._safe_add(window, 2, 3, prompt[: box_width - 6], curses.A_DIM)
+            for index, (label, _value) in enumerate(options):
+                active = index == selected
+                marker = "▶" if active else " "
+                attr = curses.A_BOLD | self._color(2) if active else curses.A_NORMAL
+                self._safe_add(window, 4 + index, 4, f"{marker} {label}"[: box_width - 8], attr)
+            self._safe_add(window, box_height - 2, 3, "↑/↓ auswählen · Enter übernehmen · Esc abbrechen", curses.A_DIM)
+            window.refresh()
+            key = window.getch()
+            if key in (curses.KEY_UP, ord("k")):
+                selected = (selected - 1) % len(options)
+            elif key in (curses.KEY_DOWN, ord("j")):
+                selected = (selected + 1) % len(options)
+            elif key in (10, 13, curses.KEY_ENTER):
+                return options[selected][1]
+            elif key == curses.KEY_BTAB:
+                return WIZARD_BACK
+            elif key == 27:
+                return None
+
+    def _dialog_yes_no(
+        self,
+        screen: curses.window,
+        title: str,
+        question: str,
+        *,
+        default: bool,
+    ) -> bool | None | object:
+        height, width = screen.getmaxyx()
+        box_width = min(width - 4, 76)
+        box_height = 9
+        window = curses.newwin(box_height, box_width, (height - box_height) // 2, (width - box_width) // 2)
+        window.keypad(True)
+        selected = default
+        lines = textwrap.wrap(question, max(10, box_width - 6))[:2]
+        while True:
+            window.erase()
+            self._draw_dialog_frame(window)
+            self._draw_dialog_heading(window, title, curses.A_BOLD | self._color(1))
+            for index, line in enumerate(lines):
+                self._safe_add(window, 3 + index, 3, line)
+            self._safe_add(window, 6, 3, "←/→ auswählen · Enter bestätigen · Esc abbrechen", curses.A_DIM)
+            self._draw_yes_no_buttons(window, 7, box_width, selected)
+            window.refresh()
+            key = window.getch()
+            if key in (10, 13, curses.KEY_ENTER):
+                return selected
+            if key == curses.KEY_BTAB:
+                return WIZARD_BACK
+            if key in (curses.KEY_LEFT, curses.KEY_RIGHT, 9, ord("h"), ord("l")):
+                selected = not selected
+            elif key in (ord("j"), ord("J"), ord("y"), ord("Y")):
+                return True
+            elif key in (ord("n"), ord("N")):
+                return False
+            elif key == 27:
+                return None
+
+    def _confirm_synadm_config(
+        self,
+        screen: curses.window,
+        path: Path,
+        config: SynadmConfig,
+    ) -> bool | object:
+        height, width = screen.getmaxyx()
+        box_width = min(width - 4, 82)
+        box_height = 16
+        window = curses.newwin(box_height, box_width, (height - box_height) // 2, (width - box_width) // 2)
+        window.keypad(True)
+        selected = False
+        summary = [f"Datei:       {path}", *config.public_summary().splitlines()]
+        while True:
+            window.erase()
+            self._draw_dialog_frame(window)
+            self._draw_dialog_heading(window, "Konfiguration prüfen", curses.A_BOLD | self._color(1))
+            for index, line in enumerate(summary[:9]):
+                self._safe_add(window, 3 + index, 3, line[: box_width - 6])
+            self._safe_add(window, 13, 3, "Token bleibt verdeckt · ←/→ auswählen · Enter speichern", curses.A_DIM)
+            self._draw_yes_no_buttons(window, 14, box_width, selected)
+            window.refresh()
+            key = window.getch()
+            if key in (10, 13, curses.KEY_ENTER):
+                return selected
+            if key == curses.KEY_BTAB:
+                return WIZARD_BACK
+            if key in (curses.KEY_LEFT, curses.KEY_RIGHT, 9, ord("h"), ord("l")):
+                selected = not selected
+            elif key in (ord("j"), ord("J"), ord("y"), ord("Y")):
+                return True
+            elif key in (ord("n"), ord("N"), 27):
+                return False
 
     def _draw_csv_header(self, screen: curses.window, step: int, title: str) -> None:
         _height, width = screen.getmaxyx()
@@ -770,7 +1557,7 @@ class App:
             self._safe_add(screen, 0, position, text, attr)
             position += len(text) + 2
         try:
-            screen.hline(1, 0, curses.ACS_HLINE, width, curses.A_DIM)
+            self._safe_add(screen, 1, 0, "═" * (width - 1), curses.A_BOLD | self._color(1))
         except curses.error:
             pass
 
@@ -802,13 +1589,13 @@ class App:
         try:
             while True:
                 window.erase()
-                window.box()
-                self._safe_add(window, 1, 2, title, curses.A_BOLD | self._color(1))
+                self._draw_dialog_frame(window)
+                self._draw_dialog_heading(window, title, curses.A_BOLD | self._color(1))
                 self._safe_add(window, 2, 2, hint[: box_width - 4], curses.A_DIM)
                 shown = "".join(value)
                 display = "•" * len(shown) if secret else shown
                 self._safe_add(window, 4, 2, display[-(box_width - 5) :])
-                self._safe_add(window, 5, 2, "Enter bestätigen · Esc abbrechen", curses.A_DIM)
+                self._safe_add(window, 5, 2, "Enter weiter · Shift+Tab zurück · Esc abbrechen", curses.A_DIM)
                 window.move(4, min(box_width - 3, 2 + len(display)))
                 window.refresh()
                 key = window.get_wch()
@@ -816,15 +1603,19 @@ class App:
                     return shown
                 if key == "\x1b":
                     return None
+                if key == curses.KEY_BTAB:
+                    return WIZARD_BACK
                 if key in (curses.KEY_BACKSPACE, "\b", "\x7f"):
                     if value:
                         value.pop()
+                    else:
+                        return WIZARD_BACK
                 elif isinstance(key, str) and key.isprintable():
                     value.append(key)
         finally:
             curses.curs_set(0)
 
-    def _choose_delimiter(self, screen: curses.window, detected: str) -> str | None:
+    def _choose_delimiter(self, screen: curses.window, detected: str) -> str | None | object:
         options = (
             ("Semikolon", ";"),
             ("Komma", ","),
@@ -841,8 +1632,8 @@ class App:
         window.keypad(True)
         while True:
             window.erase()
-            window.box()
-            self._safe_add(window, 1, 2, "CSV-Import · 2/4 · Trennzeichen", curses.A_BOLD | self._color(1))
+            self._draw_dialog_frame(window)
+            self._draw_dialog_heading(window, "CSV-Import · 2/4 · Trennzeichen", curses.A_BOLD | self._color(1))
             self._safe_add(window, 2, 2, "Erkannt – bei Bedarf ändern:", curses.A_DIM)
             label, value = options[selected]
             shown = "TAB" if value == "\t" else value
@@ -868,6 +1659,8 @@ class App:
                 if opened:
                     return options[selected][1]
                 opened = True
+            elif key == curses.KEY_BTAB:
+                return WIZARD_BACK
             elif key == 27:
                 if opened:
                     opened = False
@@ -881,7 +1674,7 @@ class App:
         question: str,
         *,
         default: bool = False,
-    ) -> bool | None:
+    ) -> bool | None | object:
         height, width = screen.getmaxyx()
         self._draw_csv_backdrop(screen, 2, "Format festlegen", "CSV-Format")
         box_width = min(width - 4, 70)
@@ -890,8 +1683,8 @@ class App:
         selected = default
         while True:
             window.erase()
-            window.box()
-            self._safe_add(window, 1, 2, title, curses.A_BOLD | self._color(1))
+            self._draw_dialog_frame(window)
+            self._draw_dialog_heading(window, title, curses.A_BOLD | self._color(1))
             self._safe_add(window, 3, 2, question[: box_width - 4])
             self._safe_add(window, 4, 2, "←/→ auswählen · Enter bestätigen · Esc abbrechen", curses.A_DIM)
             self._draw_yes_no_buttons(window, 5, box_width, selected)
@@ -899,6 +1692,8 @@ class App:
             key = window.getch()
             if key in (10, 13, curses.KEY_ENTER):
                 return selected
+            if key == curses.KEY_BTAB:
+                return WIZARD_BACK
             if key in (curses.KEY_LEFT, curses.KEY_RIGHT, 9, ord("h"), ord("l")):
                 selected = not selected
             if key in (ord("j"), ord("J"), ord("y"), ord("Y")):
@@ -918,7 +1713,13 @@ class App:
         self._safe_add(window, y, start, yes, yes_attr)
         self._safe_add(window, y, start + len(yes) + gap, no, no_attr)
 
-    def _map_csv_columns(self, screen: curses.window, data: CsvData) -> dict[str, int | None] | None:
+    def _map_csv_columns(
+        self,
+        screen: curses.window,
+        data: CsvData,
+        *,
+        initial: dict[str, int | None] | None = None,
+    ) -> dict[str, int | None] | None | object:
         aliases = {
             "user_id": {"user", "username", "userid", "user_id", "benutzer", "benutzer-id", "mxid"},
             "password": {"password", "passwort", "kennwort"},
@@ -929,12 +1730,13 @@ class App:
             "avatar_url": {"avatar", "avatar_url", "avatar-url"},
             "locked": {"locked", "lock", "gesperrt", "sperre"},
         }
-        mapping: dict[str, int | None] = {}
+        mapping: dict[str, int | None] = dict(initial or {})
         for field in FIELDS:
-            mapping[field.key] = next(
-                (index for index, label in enumerate(data.labels) if label.strip().lower() in aliases[field.key]),
-                None,
-            )
+            if field.key not in mapping:
+                mapping[field.key] = next(
+                    (index for index, label in enumerate(data.labels) if label.strip().lower() in aliases[field.key]),
+                    None,
+                )
         selected = 0
         message = ""
         while True:
@@ -969,6 +1771,8 @@ class App:
             self._safe_add(screen, height - 1, 2, "↑/↓ Feld · ←/→ Spalte · Enter übernehmen · Esc abbrechen", curses.A_DIM)
             screen.refresh()
             key = screen.getch()
+            if key == curses.KEY_BTAB:
+                return WIZARD_BACK
             if key == 27:
                 return None
             if key in (curses.KEY_UP, ord("k")):
@@ -1036,7 +1840,7 @@ class App:
         data: CsvData,
         entries: tuple[ImportEntry, ...],
         mapping: dict[str, int | None],
-    ) -> bool:
+    ) -> bool | object:
         height, width = screen.getmaxyx()
         self._draw_csv_backdrop(screen, 4, "Import prüfen", "Zusammenfassung")
         box_height = min(height - 2, 16)
@@ -1046,8 +1850,8 @@ class App:
         selected = False
         while True:
             window.erase()
-            window.box()
-            self._safe_add(window, 1, 2, "CSV-Import · 4/4 · Vorschau", curses.A_BOLD | self._color(5))
+            self._draw_dialog_frame(window)
+            self._draw_dialog_heading(window, "CSV-Import · 4/4 · Vorschau", curses.A_BOLD | self._color(5))
             mapped = [field.title for field in FIELDS if mapping.get(field.key) is not None]
             self._safe_add(window, 3, 2, f"{len(entries)} Benutzer · Felder: {', '.join(mapped)}"[: box_width - 4])
             self._safe_add(window, 5, 2, "Die ersten Datensätze:", curses.A_BOLD)
@@ -1062,6 +1866,8 @@ class App:
             key = window.getch()
             if key in (10, 13, curses.KEY_ENTER):
                 return selected
+            if key == curses.KEY_BTAB:
+                return WIZARD_BACK
             if key in (curses.KEY_LEFT, curses.KEY_RIGHT, 9, ord("h"), ord("l")):
                 selected = not selected
             if key in (ord("j"), ord("J"), ord("y"), ord("Y")):
@@ -1082,8 +1888,8 @@ class App:
         selected = False
         while True:
             window.erase()
-            window.box()
-            self._safe_add(window, 1, 2, "Destruktive Aktion", curses.A_BOLD | self._color(4))
+            self._draw_dialog_frame(window)
+            self._draw_dialog_heading(window, "Destruktive Aktion", curses.A_BOLD | self._color(4))
             safe_args = redact_args(args)
             self._safe_add(window, 3, 2, "synadm " + " ".join(safe_args), self._color(5))
             self._safe_add(window, 5, 2, "Wirklich ausführen?  ←/→ auswählen · Enter bestätigen", curses.A_DIM)
@@ -1108,8 +1914,8 @@ class App:
         selected = False
         while True:
             window.erase()
-            window.box()
-            self._safe_add(window, 1, 2, "Paketverwaltung", curses.A_BOLD | self._color(5))
+            self._draw_dialog_frame(window)
+            self._draw_dialog_heading(window, "Paketverwaltung", curses.A_BOLD | self._color(5))
             self._safe_add(window, 3, 2, question, curses.A_BOLD)
             for row, command in enumerate(commands, start=4):
                 self._safe_add(window, row, 2, "$ " + " ".join(shlex.quote(part) for part in command), self._color(1))

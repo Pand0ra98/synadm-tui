@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import PyInstaller.__main__
@@ -12,16 +13,35 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def main() -> int:
-    PyInstaller.__main__.run([
-        str(ROOT / "scripts" / "standalone_entry.py"),
-        "--name=synadm-tui",
-        "--onefile",
-        "--clean",
-        f"--paths={ROOT}",
-        f"--distpath={ROOT / 'dist'}",
-        f"--workpath={ROOT / 'build' / 'pyinstaller'}",
-        f"--specpath={ROOT / 'build'}",
-    ])
+    builds = (
+        ("standalone_entry.py", "synadm-tui"),
+        ("standalone_thuringia_entry.py", "synadm-tui-thueringen"),
+    )
+    for entry, name in builds:
+        arguments = [
+            str(ROOT / "scripts" / entry),
+            f"--name={name}",
+            "--onefile",
+            "--clean",
+            f"--paths={ROOT}",
+            f"--distpath={ROOT / 'dist'}",
+            f"--workpath={ROOT / 'build' / 'pyinstaller' / name}",
+            f"--specpath={ROOT / 'build'}",
+        ]
+        assets = ["retro-cyberspace.png", "hacker-terminal.png"]
+        if name == "synadm-tui-thueringen":
+            assets.append("thueringen-wappen.png")
+        for asset in assets:
+            arguments.append(
+                f"--add-data={ROOT / 'synadm_tui' / 'assets' / asset}:synadm_tui/assets"
+            )
+        PyInstaller.__main__.run(arguments)
+    checksum_lines = []
+    for _entry, name in builds:
+        artifact = ROOT / "dist" / name
+        checksum = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        checksum_lines.append(f"{checksum}  {name}")
+    (ROOT / "dist" / "SHA256SUMS").write_text("\n".join(checksum_lines) + "\n", encoding="utf-8")
     return 0
 
 

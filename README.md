@@ -24,20 +24,29 @@ python3 -m synadm_tui
 ## Eigenschaften
 
 - übersichtliche Drei-Spalten-Navigation ohne Maus
+- getrennte **Standard Edition** und **Thüringen Edition** aus derselben Codebasis
+- umschaltbare Themen **Retro Cyberspace 198X**, **Matrix**, **Hacker Terminal**, **Hoher Kontrast** und **Monochrom**
+- zusätzliches Thüringen-Thema mit Wappen ausschließlich in der Thüringen Edition
+- transparente PNG-Embleme für Thüringen, Retro Cyberspace und Hacker Terminal in Kitty-, WezTerm- und Ghostty-kompatiblen Terminals; portabler Text-Fallback über SSH und in klassischen Terminals
+- kräftige Doppelrahmen, thematische Startgrafiken und zentrierte Paneltitel
 - nicht blockierende Ausführung; die Oberfläche bleibt während eines API-Aufrufs bedienbar
 - formatierte JSON-Ausgabe mit Scrollfunktion
 - zusätzliche Bestätigung vor als destruktiv markierten Befehlen
 - sichere Prozessaufrufe als Argumentliste, ohne Shell-Auswertung
 - geführte Eingabeassistenten für Suche, IDs, Limits und Benutzeränderungen
+- Rückwärtsnavigation mit `Shift+Tab` in mehrstufigen Assistenten
+- globaler Befehlsfilter, Tastaturhilfe und Detailtexte mit Beispielen
 - alternative `synadm`-Binärdatei und Konfiguration per Startoption
 - geführte Installation beziehungsweise Aktualisierung von `synadm` über `pipx`
+- sicherer Erstkonfigurations-Assistent für Server, Admin-Zugriffstoken und API-Einstellungen
 - geführter CSV-Import mit Trennzeichenerkennung, Spaltenzuordnung und Vorschau
 - nur Python-Standardbibliothek; keine Laufzeitabhängigkeiten
 
 ## Voraussetzungen
 
 - Python 3.10 oder neuer auf Linux/macOS
-- installiertes und konfiguriertes `synadm`
+- UTF-8-Terminal; für eingeschränkte Darstellung stehen Kontrast- und Monochromthemen bereit
+- `synadm`, wahlweise bereits installiert oder über die TUI nachinstalliert
 - ein Admin-Zugriffstoken in der `synadm`-Konfiguration
 
 `synadm` selbst lässt sich üblicherweise mit `pipx install synadm` installieren. Vor dem ersten TUI-Start sollte `synadm version` im selben Benutzerkonto funktionieren.
@@ -82,9 +91,14 @@ Für eine vollständig native Datei, die kein installiertes Python benötigt:
 python3 -m pip install pyinstaller
 python3 scripts/build_native.py
 ./dist/synadm-tui --version
+./dist/synadm-tui-thueringen --version
+cd dist
+sha256sum --check SHA256SUMS
 ```
 
-PyInstaller ist bewusst nur eine Build- und keine Laufzeitabhängigkeit. Die native Datei wird für das Betriebssystem und die Prozessorarchitektur des Build-Rechners erstellt. `synadm` selbst muss weiterhin separat installiert und konfiguriert sein.
+Der Build erzeugt zwei Programme und die gemeinsame Prüfsummendatei `SHA256SUMS`. `synadm-tui` ist die neutrale Standard Edition ohne Thüringen-Ressourcen in der Themenauswahl. `synadm-tui-thueringen` aktiviert zusätzlich das Thüringen-Thema und verwendet es als Standard. Bedienung, Assistenten und synadm-Funktionen stammen vollständig aus derselben Codebasis und bleiben daher identisch.
+
+PyInstaller ist bewusst nur eine Build- und keine Laufzeitabhängigkeit. Die nativen Dateien werden für das Betriebssystem und die Prozessorarchitektur des Build-Rechners erstellt. `synadm` selbst bleibt ein separates Programm, kann aber aus der TUI heraus installiert werden.
 
 ## Bedienung
 
@@ -96,16 +110,23 @@ PyInstaller ist bewusst nur eine Build- und keine Laufzeitabhängigkeit. Die nat
 | `n` | Benutzer anlegen |
 | `i` | CSV-Import öffnen |
 | `/` | Benutzer suchen |
+| `c` | synadm-Konfigurationsassistent öffnen |
+| `f` | Befehle über alle Bereiche filtern |
+| `?` | Tastaturhilfe anzeigen |
+| `t` | Themenauswahl öffnen |
+| `Shift+Tab` | Im Assistenten einen Schritt zurückgehen |
 | `PgUp` / `PgDn`, `Home` | Ausgabe scrollen |
 | `r` | letzten Befehl wiederholen |
 | `q` | beenden |
 | `Esc` | Eingabe oder Bestätigung abbrechen |
 
-Geführte Assistenten fragen häufige Werte wie Suchtext, Limit und Matrix-ID einzeln ab. Erweiterte Argumente werden wie in der Shell geschrieben; Anführungszeichen werden unterstützt. Die Eingabe wird mit `shlex` zerlegt und **nicht** durch eine Shell ausgeführt.
+Geführte Assistenten fragen häufige Werte wie Suchtext, Limit und Matrix-ID einzeln ab. Mit `Shift+Tab` geht es zum vorherigen Schritt; `Backspace` tut dies ebenfalls, wenn das aktuelle Eingabefeld bereits leer ist. Erweiterte Argumente werden wie in der Shell geschrieben; Anführungszeichen werden unterstützt. Die Eingabe wird mit `shlex` zerlegt und **nicht** durch eine Shell ausgeführt. Die Reaktionszeit der einzelnen `Esc`-Taste wird auf 35 ms reduziert.
 
-Gelb und mit `!` markierte Einträge verändern oder löschen Daten. Die TUI verlangt dafür eine zweite Bestätigung. Trotzdem empfiehlt sich vor großflächigen Verwaltungsaktionen ein aktuelles Synapse-Backup.
+`·` kennzeichnet lesende, `+` schreibende und `!` besonders gefährliche Aktionen. Der Detailbereich erklärt die Auswahl und zeigt ein Beispiel. Für gefährliche Aktionen verlangt die TUI eine zweite Bestätigung. Trotzdem empfiehlt sich vor großflächigen Verwaltungsaktionen ein aktuelles Synapse-Backup.
 
-Interaktive Zugangsdaten gehören nicht in die Kommandozeile. Login und Erstkonfiguration daher außerhalb der TUI ausführen:
+Die Erstkonfiguration ist mit `c` sowie unter **Weitere → synadm-Erstkonfiguration** erreichbar. Der Assistent fragt Konfigurationspfad, Admin-Benutzer, Zugriffstoken, Verbindung, API-Pfade, Homeserver-Erkennung, Ausgabeformat, Timeout und TLS-Prüfung ab. Vorhandene Dateien werden vor dem Überschreiben als zeitgestempelte `.bak-*`-Datei gesichert. Das Ergebnis wird atomar mit Dateirechten `0600` gespeichert; ein anschließender Diagnoseaufruf zeigt Erfolg oder Fehlergrund im Detailbereich.
+
+Alternativ bleibt die interaktive Einrichtung von `synadm` auf der Kommandozeile möglich:
 
 ```bash
 synadm config
@@ -137,10 +158,15 @@ Im Dateibrowser öffnet `Enter` ein Verzeichnis beziehungsweise wählt eine CSV-
 
 In Ja/Nein-Dialogen wird die gewünschte Schaltfläche mit `←`/`→` gewählt und mit `Enter` bestätigt. Sicherheitsabfragen starten grundsätzlich auf **Nein**.
 
+Die Themenauswahl ist jederzeit mit `t` sowie unter **Weitere → Darstellung / Thema wählen** erreichbar. Mit `↑`/`↓` wird die Farbgebung live ausprobiert, `Enter` speichert sie editionsabhängig unter `~/.config/synadm-tui/`, und `Esc` stellt das vorherige Thema wieder her.
+
+Die Standard Edition enthält die generierten Embleme `retro-cyberspace.png` und `hacker-terminal.png`; die Thüringen Edition ergänzt `thueringen-wappen.png`. Unterstützt das Terminal das Kitty-Grafikprotokoll – beispielsweise Kitty, WezTerm oder Ghostty –, erscheint das zum aktiven Thema passende transparente PNG direkt im Detailbereich. In anderen Terminals und typischen SSH-Sitzungen wird automatisch die portable Textgrafik verwendet; alle Funktionen bleiben identisch.
+
 ## Sicherheit
 
 - `synadm-tui` startet Prozesse ohne Shell und aktiviert den nicht-interaktiven `synadm`-Modus.
-- Zugriffstokens werden weder gelesen noch von der TUI gespeichert; hierfür bleibt `synadm` zuständig.
+- Der Erstkonfigurations-Assistent schreibt den eingegebenen Zugriffstoken ausschließlich in die gewählte `synadm`-Konfigurationsdatei. Er wird verdeckt eingegeben, nicht in der Vorschau angezeigt und nicht als Prozessargument übergeben.
+- Neu erzeugte Konfigurationsdateien werden atomar geschrieben und erhalten auf POSIX-Systemen die Dateirechte `0600`.
 - Passwörter werden in Eingabe, Vorschau und Ergebnis maskiert.
 - Beim nicht-interaktiven Benutzerimport muss `synadm` Passwörter kurzzeitig als Prozessargument erhalten. Auf Mehrbenutzersystemen können andere privilegierte Prozesse diese möglicherweise sehen.
 - Konfigurationsdateien, `.env`-Dateien und lokale YAML-Konfigurationen sind standardmäßig von Git ausgeschlossen.
@@ -153,6 +179,10 @@ In Ja/Nein-Dialogen wird die gewünschte Schaltfläche mit `←`/`→` gewählt 
 | `runner.py` | sichere `synadm`-Prozessausführung |
 | `catalog.py` | Bereiche und verfügbare Aktionen |
 | `assistants.py` | strukturierte Eingabefelder pro Befehl |
+| `command_help.py` | Beschreibungen, Beispiele und Schreibschutz-Kennzeichnung |
+| `configuration.py` | Validierung, Sicherung und atomare synadm-Konfiguration |
+| `edition.py` | gemeinsame Editionsprofile ohne duplizierten Anwendungscode |
+| `terminal_image.py` | optionale transparente PNG-Darstellung mit sicherem Text-Fallback |
 | `csv_import.py` | CSV-Erkennung, Validierung und Importplanung |
 | `file_browser.py` | Dateibrowser für CSV-Dateien |
 

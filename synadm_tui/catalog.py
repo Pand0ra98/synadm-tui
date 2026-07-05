@@ -77,6 +77,8 @@ SECTIONS = (
     Section(
         "Weitere",
         (
+            Command("Darstellung / Thema wählen", (), "Editionabhängige Farb- und Kontrastthemen", False, "choose_theme"),
+            Command("synadm-Erstkonfiguration", (), "Geführte, sichere Einrichtung", False, "configure_synadm"),
             Command("synadm installieren/aktualisieren", (), "Installation mit pipx", True, "install_synadm"),
             Command("synadm deinstallieren", (), "Sauber aus pipx entfernen", True, "uninstall_synadm"),
             Command("pipx und synadm entfernen", (), "Paketumgebung bereinigen", True, "uninstall_pipx"),

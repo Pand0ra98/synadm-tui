@@ -15,6 +15,8 @@ class CatalogTests(unittest.TestCase):
         self.assertTrue(installer.dangerous)
         self.assertEqual(installer.argv, ())
         package_actions = {command.action for command in commands}
+        self.assertIn("choose_theme", package_actions)
+        self.assertIn("configure_synadm", package_actions)
         self.assertIn("uninstall_synadm", package_actions)
         self.assertIn("uninstall_pipx", package_actions)
 
