@@ -19,9 +19,13 @@ def _asset_path(theme_key: str) -> Path:
     return Path(__file__).resolve().parent / "assets" / f"{theme_key}.block.json"
 
 
-@lru_cache(maxsize=8)
-def load_block_cells(theme_key: str, alpha_threshold: int = 48) -> tuple[tuple[BlockCell | None, ...], ...] | None:
-    path = _asset_path(theme_key)
+@lru_cache(maxsize=16)
+def load_block_cells(
+    theme_key: str,
+    asset_path: Path | None = None,
+    alpha_threshold: int = 48,
+) -> tuple[tuple[BlockCell | None, ...], ...] | None:
+    path = _asset_path(theme_key) if asset_path is None else asset_path
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
         width, height = int(payload["width"]), int(payload["height"])

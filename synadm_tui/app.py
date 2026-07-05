@@ -51,18 +51,8 @@ class Theme:
     palette: tuple[tuple[int, int], ...]
     art: tuple[str, ...]
     ready_label: str
-
-
-THURINGIA_CREST = (
-    "      .-============-.",
-    "     /  *  *  *  *   \\",
-    "    |      /\\_/\\      |",
-    "    |  ___/ o o \\___   |",
-    "    | /   |==^==|   \\  |",
-    "    |     /|===|\\      |",
-    "     \\  *  *  *  *   /",
-    "      '============'",
-)
+    image_path: Path | None = None
+    block_path: Path | None = None
 
 CYBERSPACE_ART = (
     "       /\\  /\\  /\\",
@@ -103,20 +93,6 @@ ACCESSIBLE_ART = (
 )
 
 THEMES = (
-    Theme(
-        "thuringia",
-        "Freistaat Thüringen",
-        "THÜRINGEN",
-        (
-            (curses.COLOR_RED, -1), (curses.COLOR_WHITE, curses.COLOR_RED),
-            (curses.COLOR_CYAN, -1), (curses.COLOR_RED, -1),
-            (curses.COLOR_YELLOW, -1), (curses.COLOR_WHITE, -1),
-            (curses.COLOR_BLUE, -1), (curses.COLOR_WHITE, curses.COLOR_BLUE),
-            (curses.COLOR_RED, curses.COLOR_WHITE),
-        ),
-        THURINGIA_CREST,
-        "FREISTAAT THÜRINGEN // SYSTEM BEREIT",
-    ),
     Theme(
         "cyberspace",
         "Retro Cyberspace 198X",
@@ -207,11 +183,21 @@ class Activity:
 
 
 class App:
-    def __init__(self, runner: SynadmRunner, edition: Edition = STANDARD_EDITION) -> None:
+    def __init__(
+        self,
+        runner: SynadmRunner,
+        edition: Edition = STANDARD_EDITION,
+        extra_themes: tuple[Theme, ...] = (),
+    ) -> None:
         self.runner = runner
         self.edition = edition
-        self.available_themes = tuple(THEMES_BY_KEY[key] for key in edition.theme_keys)
-        self.theme = self._load_theme(edition)
+        self.themes_by_key = dict(THEMES_BY_KEY)
+        self.themes_by_key.update((theme.key, theme) for theme in extra_themes)
+        missing = tuple(key for key in edition.theme_keys if key not in self.themes_by_key)
+        if missing:
+            raise ValueError(f"Theme nicht registriert: {', '.join(missing)}")
+        self.available_themes = tuple(self.themes_by_key[key] for key in edition.theme_keys)
+        self.theme = self._load_theme(edition, self.themes_by_key)
         self.selection = Selection()
         self.focus = "sections"
         self.result: Result | None = None
@@ -272,14 +258,19 @@ class App:
         return base / "synadm-tui" / f"theme-{edition.key}"
 
     @classmethod
-    def _load_theme(cls, edition: Edition = STANDARD_EDITION) -> Theme:
+    def _load_theme(
+        cls,
+        edition: Edition = STANDARD_EDITION,
+        themes_by_key: dict[str, Theme] | None = None,
+    ) -> Theme:
         try:
             key = cls._theme_config_path(edition).read_text(encoding="utf-8").strip()
         except OSError:
             key = edition.default_theme
         if key not in edition.theme_keys:
             key = edition.default_theme
-        return THEMES_BY_KEY[key]
+        registry = THEMES_BY_KEY if themes_by_key is None else themes_by_key
+        return registry[key]
 
     @classmethod
     def _save_theme(cls, theme: Theme, edition: Edition = STANDARD_EDITION) -> bool:
@@ -1128,7 +1119,7 @@ class App:
             self._draw_command_details(screen, y, x, width, height)
             return
         if self.result is None and self.output.startswith("Bereit."):
-            image_path = theme_image_path(self.theme.key)
+            image_path = self.theme.image_path or theme_image_path(self.theme.key)
             if (
                 image_path is not None
                 and self.inline_images_supported
@@ -1195,7 +1186,7 @@ class App:
     ) -> bool:
         if not curses.has_colors() or getattr(curses, "COLORS", 0) < 256:
             return False
-        rows = load_block_cells(self.theme.key)
+        rows = load_block_cells(self.theme.key, self.theme.block_path)
         if not rows or len(rows) > height - 4:
             return False
         art_width = len(rows[0])

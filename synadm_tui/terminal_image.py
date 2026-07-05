@@ -12,7 +12,6 @@ IMAGE_ID = 73113
 
 
 THEME_IMAGES = {
-    "thuringia": "thueringen-wappen.png",
     "cyberspace": "retro-cyberspace.png",
     "hacker": "hacker-terminal.png",
 }

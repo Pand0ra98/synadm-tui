@@ -5,7 +5,7 @@ from synadm_tui.block_art import load_block_cells, rgb_to_xterm
 
 class BlockArtTests(unittest.TestCase):
     def test_generated_theme_grids_form_ten_terminal_rows(self) -> None:
-        for theme in ("thuringia", "cyberspace", "hacker"):
+        for theme in ("cyberspace", "hacker"):
             rows = load_block_cells(theme)
             self.assertIsNotNone(rows)
             assert rows is not None
@@ -15,6 +15,7 @@ class BlockArtTests(unittest.TestCase):
 
     def test_unknown_theme_has_no_block_art(self) -> None:
         self.assertIsNone(load_block_cells("matrix"))
+        self.assertIsNone(load_block_cells("thuringia"))
 
     def test_rgb_mapping_uses_xterm_256_palette(self) -> None:
         self.assertEqual(rgb_to_xterm(0, 0, 0), 16)

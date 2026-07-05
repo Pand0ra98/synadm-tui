@@ -13,10 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def main() -> int:
-    builds = (
-        ("standalone_entry.py", "synadm-tui"),
-        ("standalone_thuringia_entry.py", "synadm-tui-thueringen"),
-    )
+    builds = (("standalone_entry.py", "synadm-tui"),)
     for entry, name in builds:
         arguments = [
             str(ROOT / "scripts" / entry),
@@ -32,8 +29,6 @@ def main() -> int:
             "retro-cyberspace.png", "hacker-terminal.png",
             "cyberspace.block.json", "hacker.block.json",
         ]
-        if name == "synadm-tui-thueringen":
-            assets.extend(("thueringen-wappen.png", "thuringia.block.json"))
         for asset in assets:
             arguments.append(
                 f"--add-data={ROOT / 'synadm_tui' / 'assets' / asset}:synadm_tui/assets"

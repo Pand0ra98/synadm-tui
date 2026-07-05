@@ -1,4 +1,4 @@
-"""Edition profiles; all application behavior remains shared."""
+"""Edition profile used by the shared application core."""
 
 from __future__ import annotations
 
@@ -22,12 +22,4 @@ STANDARD_EDITION = Edition(
     theme_keys=("cyberspace", "matrix", "hacker", "high-contrast", "monochrome"),
 )
 
-THURINGIA_EDITION = Edition(
-    key="thuringia",
-    name="Thüringen Edition",
-    binary_name="synadm-tui-thueringen",
-    default_theme="thuringia",
-    theme_keys=("thuringia", "cyberspace", "matrix", "hacker", "high-contrast", "monochrome"),
-)
-
-EDITIONS = {edition.key: edition for edition in (STANDARD_EDITION, THURINGIA_EDITION)}
+EDITIONS = {STANDARD_EDITION.key: STANDARD_EDITION}

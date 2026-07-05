@@ -12,7 +12,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "synadm_tui" / "assets"
 SOURCES = {
-    "thuringia": "thueringen-wappen.png",
     "cyberspace": "retro-cyberspace.png",
     "hacker": "hacker-terminal.png",
 }

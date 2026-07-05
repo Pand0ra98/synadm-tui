@@ -24,10 +24,9 @@ python3 -m synadm_tui
 ## Eigenschaften
 
 - übersichtliche Drei-Spalten-Navigation ohne Maus
-- getrennte **Standard Edition** und **Thüringen Edition** aus derselben Codebasis
+- neutrale **Standard Edition** ohne regionale Branding-Ressourcen
 - umschaltbare Themen **Retro Cyberspace 198X**, **Matrix**, **Hacker Terminal**, **Hoher Kontrast** und **Monochrom**
-- zusätzliches Thüringen-Thema mit Wappen ausschließlich in der Thüringen Edition
-- transparente PNG-Embleme für Thüringen, Retro Cyberspace und Hacker Terminal in Kitty-, WezTerm- und Ghostty-kompatiblen Terminals
+- transparente PNG-Embleme für Retro Cyberspace und Hacker Terminal in Kitty-, WezTerm- und Ghostty-kompatiblen Terminals
 - farbiger Unicode-Halbblock-Renderer für Alacritty, Zellij und andere 256-Farben-Terminals; Text-Fallback für stark eingeschränkte Terminals
 - kräftige Doppelrahmen, thematische Startgrafiken und zentrierte Paneltitel
 - nicht blockierende Ausführung; die Oberfläche bleibt während eines API-Aufrufs bedienbar
@@ -92,14 +91,72 @@ Für eine vollständig native Datei, die kein installiertes Python benötigt:
 python3 -m pip install pyinstaller
 python3 scripts/build_native.py
 ./dist/synadm-tui --version
-./dist/synadm-tui-thueringen --version
 cd dist
 sha256sum --check SHA256SUMS
 ```
 
-Der Build erzeugt zwei Programme und die gemeinsame Prüfsummendatei `SHA256SUMS`. `synadm-tui` ist die neutrale Standard Edition ohne Thüringen-Ressourcen in der Themenauswahl. `synadm-tui-thueringen` aktiviert zusätzlich das Thüringen-Thema und verwendet es als Standard. Bedienung, Assistenten und synadm-Funktionen stammen vollständig aus derselben Codebasis und bleiben daher identisch.
+Der Build erzeugt die neutrale Standard Edition und die Prüfsummendatei `SHA256SUMS`.
 
 PyInstaller ist bewusst nur eine Build- und keine Laufzeitabhängigkeit. Die nativen Dateien werden für das Betriebssystem und die Prozessorarchitektur des Build-Rechners erstellt. `synadm` selbst bleibt ein separates Programm, kann aber aus der TUI heraus installiert werden.
+
+## DEB- und RPM-Pakete ohne Runner
+
+Aus den beiden nativen Dateien lassen sich lokal installierbare Pakete erzeugen. Benötigt werden `dpkg-deb` für Debian-Pakete und `rpmbuild` aus dem Paket `rpm` beziehungsweise `rpm-build` für RPM-Pakete:
+
+```bash
+python3 scripts/build_native.py
+python3 scripts/build_packages.py
+cd dist/packages
+sha256sum --check SHA256SUMS
+```
+
+Das Ergebnis enthält jeweils ein DEB- und RPM-Paket. Die Build-Architektur wird automatisch auf `amd64`/`x86_64` beziehungsweise `arm64`/`aarch64` abgebildet. Das Skript verweigert die Paketierung, wenn die Versionsnummer der nativen Datei nicht zu `pyproject.toml` passt.
+
+Die aktuellen Linux-Dateien benötigen mindestens glibc 2.34. Für eine möglichst breite Kompatibilität sollten Release-Dateien später in einer festgelegten, älteren Build-Umgebung erzeugt werden.
+
+### Manuell in Gitea veröffentlichen
+
+Der Zugriffstoken benötigt den Gitea-Scope `write:package`. Er wird ausschließlich aus der Umgebungsvariable gelesen und nicht als Prozessargument übergeben:
+
+```bash
+read -rsp "Gitea-Paket-Token: " GITEA_PACKAGE_TOKEN
+export GITEA_PACKAGE_TOKEN
+python3 scripts/publish_packages.py --dry-run
+python3 scripts/publish_packages.py
+unset GITEA_PACKAGE_TOKEN
+```
+
+Wenn bereits ein entsprechend berechtigter `tea`-Login vorhanden ist, kann dessen Token ohne erneute Eingabe und ohne Ausgabe gelesen werden:
+
+```bash
+python3 scripts/publish_packages.py --tea-login Building
+```
+
+Standardmäßig werden die Pakete unter dem Eigentümer `pan`, DEB-Distribution `stable`, Komponente `main` und der gruppenlosen RPM-Registry veröffentlicht. Server, Eigentümer und Repository-Gruppen lassen sich über die Kommandozeilenoptionen anpassen. Dafür ist kein Actions-Runner erforderlich.
+
+### Paketquelle verwenden
+
+Debian und Ubuntu:
+
+```bash
+sudo install -d -m 0755 /etc/apt/keyrings
+sudo curl -fsSL https://git.blackwall.ipv64.de/api/packages/pan/debian/repository.key \
+  -o /etc/apt/keyrings/pan-gitea.asc
+echo "deb [signed-by=/etc/apt/keyrings/pan-gitea.asc] https://git.blackwall.ipv64.de/api/packages/pan/debian stable main" \
+  | sudo tee /etc/apt/sources.list.d/synadm-tui.list
+sudo apt update
+sudo apt install synadm-tui
+```
+
+Fedora, RHEL und kompatible Systeme:
+
+```bash
+sudo curl -fsSL https://git.blackwall.ipv64.de/api/packages/pan/rpm.repo \
+  -o /etc/yum.repos.d/synadm-tui.repo
+sudo dnf install synadm-tui
+```
+
+Die separat gepflegte [Thüringen Edition](https://git.blackwall.ipv64.de/pan/synadm-tui-thueringen) verwendet denselben Anwendungskern, bringt ihr Branding und ihre Pakete aber in einem eigenen Repository mit.
 
 ## Bedienung
 
@@ -161,7 +218,7 @@ In Ja/Nein-Dialogen wird die gewünschte Schaltfläche mit `←`/`→` gewählt 
 
 Die Themenauswahl ist jederzeit mit `t` sowie unter **Weitere → Darstellung / Thema wählen** erreichbar. Mit `↑`/`↓` wird die Farbgebung live ausprobiert, `Enter` speichert sie editionsabhängig unter `~/.config/synadm-tui/`, und `Esc` stellt das vorherige Thema wieder her.
 
-Die Standard Edition enthält die generierten Embleme `retro-cyberspace.png` und `hacker-terminal.png`; die Thüringen Edition ergänzt `thueringen-wappen.png`. Unterstützt das Terminal das Kitty-Grafikprotokoll – beispielsweise Kitty, WezTerm oder Ghostty –, erscheint das zum aktiven Thema passende transparente PNG direkt im Detailbereich. Unter Alacritty, innerhalb von Zellij und in anderen 256-Farben-Terminals zeichnet die TUI automatisch eine kompakte farbige Annäherung mit Unicode-Halbblöcken. Nur wenn auch das nicht möglich ist, wird die reine Textgrafik verwendet. Sixel wird dafür nicht benötigt; alle Funktionen bleiben identisch.
+Die Standard Edition enthält die generierten Embleme `retro-cyberspace.png` und `hacker-terminal.png`. Unterstützt das Terminal das Kitty-Grafikprotokoll – beispielsweise Kitty, WezTerm oder Ghostty –, erscheint das zum aktiven Thema passende transparente PNG direkt im Detailbereich. Unter Alacritty, innerhalb von Zellij und in anderen 256-Farben-Terminals zeichnet die TUI automatisch eine kompakte farbige Annäherung mit Unicode-Halbblöcken. Nur wenn auch das nicht möglich ist, wird die reine Textgrafik verwendet. Sixel wird dafür nicht benötigt.
 
 ## Sicherheit
 
@@ -182,7 +239,7 @@ Die Standard Edition enthält die generierten Embleme `retro-cyberspace.png` und
 | `assistants.py` | strukturierte Eingabefelder pro Befehl |
 | `command_help.py` | Beschreibungen, Beispiele und Schreibschutz-Kennzeichnung |
 | `configuration.py` | Validierung, Sicherung und atomare synadm-Konfiguration |
-| `edition.py` | gemeinsame Editionsprofile ohne duplizierten Anwendungscode |
+| `edition.py` | neutrales Standardprofil und Erweiterungsschnittstelle für externe Editionen |
 | `terminal_image.py` | optionale transparente PNG-Darstellung über das Kitty-Grafikprotokoll |
 | `block_art.py` | protokollfreie 256-Farben-Darstellung für Alacritty und Multiplexer |
 | `csv_import.py` | CSV-Erkennung, Validierung und Importplanung |

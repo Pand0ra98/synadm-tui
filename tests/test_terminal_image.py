@@ -23,13 +23,14 @@ class TerminalImageTests(unittest.TestCase):
         self.assertIn(b"a=d", kitty_delete_sequence())
 
     def test_theme_pngs_are_packaged(self) -> None:
-        for theme in ("thuringia", "cyberspace", "hacker"):
+        for theme in ("cyberspace", "hacker"):
             path = theme_image_path(theme)
             self.assertIsNotNone(path)
             assert path is not None
             self.assertTrue(path.is_file())
             self.assertEqual(path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
         self.assertIsNone(theme_image_path("matrix"))
+        self.assertIsNone(theme_image_path("thuringia"))
 
 
 if __name__ == "__main__":

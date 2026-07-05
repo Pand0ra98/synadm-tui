@@ -1,3 +1,3 @@
 """A small, dependency-free TUI for synadm."""
 
-__version__ = "0.14"
+__version__ = "0.15"
