@@ -151,7 +151,10 @@ sudo apt update
 sudo apt install synadm-tui
 ```
 
-Dieser Ablauf wurde mit Version 0.15 in einer isolierten APT-Umgebung geprüft: Signaturprüfung, Paketauflösung, Download, Dateirechte und Programmstart waren erfolgreich.
+APT wählt automatisch die neueste verfügbare Version. Eine Versionsangabe wie
+`synadm-tui=0.16` ist für die normale Installation nicht erforderlich.
+
+Dieser Ablauf wurde mit Version 0.16 in einer isolierten APT-Umgebung geprüft: Signaturprüfung, Paketauflösung, Download, Dateirechte und Programmstart waren erfolgreich.
 
 Fedora, RHEL und kompatible Systeme:
 

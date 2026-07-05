@@ -3,33 +3,58 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.egg-info/
+.eggs/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+.pyre/
+.pytype/
+.pyright/
 
 # Packaging
 build/
 dist/
 *.whl
+*.deb
+*.rpm
+rpmbuild/
 
 # Virtual environments
 .venv/
 venv/
 env/
+.direnv/
 
 # Coverage
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 
 # Editors and operating systems
 .idea/
 .vscode/
+.fleet/
 *.swp
+*.swo
 *~
 .DS_Store
+Thumbs.db
 
 # Local configuration and secrets
 .env
+.env.*
+!.env.example
 synadm.yaml
 synadm.yml
+synadm.yaml.bak-*
+synadm.yml.bak-*
 *.local.yaml
+*.local.yml
+
+# Local logs and temporary files
+*.log
+*.tmp

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -22,6 +23,20 @@ class PackageBuildTests(unittest.TestCase):
     def test_supported_architecture_mapping(self) -> None:
         with mock.patch.object(build_packages.platform, "machine", return_value="x86_64"):
             self.assertEqual(build_packages.architecture(), ("amd64", "x86_64"))
+
+    def test_debian_package_name_does_not_contain_version(self) -> None:
+        edition = build_packages.EDITIONS[0]
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / edition.executable).write_bytes(b"test executable")
+            stage = root / "stage"
+            with mock.patch.object(build_packages, "DIST", root):
+                build_packages.write_debian_control(stage, edition, "0.16", "amd64")
+            control = (stage / "DEBIAN" / "control").read_text(encoding="utf-8")
+
+        self.assertIn("Package: synadm-tui\n", control)
+        self.assertIn("Version: 0.16\n", control)
+        self.assertNotIn("Package: synadm-tui=0.16", control)
 
     def test_rpm_spec_contains_expected_binary(self) -> None:
         edition = build_packages.EDITIONS[0]
