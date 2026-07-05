@@ -42,11 +42,28 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(self.app.activities[0].label, "user list")
         self.assertTrue(self.app.activities[0].ok)
 
-    @patch("synadm_tui.app.shutil.which", return_value=None)
-    def test_installer_explains_missing_pipx(self, _which) -> None:
+    @patch("synadm_tui.app.App._confirm_package_action", return_value=False)
+    @patch("synadm_tui.app.shutil.which")
+    def test_installer_offers_to_install_missing_pipx(self, which, confirm) -> None:
+        which.side_effect = lambda name: None if name == "pipx" else "/usr/bin/python3"
         self.app._install_synadm(None)  # type: ignore[arg-type]
-        self.assertIn("pipx wurde nicht gefunden", self.app.status)
-        self.assertIn("sudo apt install pipx", self.app.output)
+        self.assertEqual(self.app.status, "Installation abgebrochen")
+        self.assertIn("pipx fehlt", confirm.call_args.args[1])
+
+    @patch("synadm_tui.app.shutil.which", return_value="/usr/bin/pipx")
+    @patch("synadm_tui.app.App._pipx_managed_apps", return_value={"synadm", "other-tool"})
+    def test_pipx_removal_refuses_when_other_apps_exist(self, _apps, _which) -> None:
+        self.app._uninstall_pipx(None)  # type: ignore[arg-type]
+        self.assertIn("weitere Anwendungen", self.app.status)
+        self.assertIn("other-tool", self.app.output)
+
+    @patch("synadm_tui.app.shutil.which", return_value="/usr/bin/apt-get")
+    @patch("synadm_tui.app.os.geteuid", return_value=0)
+    def test_system_pipx_uses_detected_package_manager(self, _euid, _which) -> None:
+        self.assertEqual(
+            self.app._pipx_remove_command("/usr/bin/pipx"),
+            ["apt-get", "remove", "-y", "pipx"],
+        )
 
 
 if __name__ == "__main__":

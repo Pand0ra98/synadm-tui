@@ -78,6 +78,8 @@ SECTIONS = (
         "Weitere",
         (
             Command("synadm installieren/aktualisieren", (), "Installation mit pipx", True, "install_synadm"),
+            Command("synadm deinstallieren", (), "Sauber aus pipx entfernen", True, "uninstall_synadm"),
+            Command("pipx und synadm entfernen", (), "Paketumgebung bereinigen", True, "uninstall_pipx"),
             Command("Servernachricht senden", ("notice", "send"), "OPTIONEN"),
             Command("History-Purge", ("history", "purge"), "OPTIONEN", True),
             Command("Eigener synadm-Befehl", (), "z. B. user list --limit 20"),

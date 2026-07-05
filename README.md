@@ -42,7 +42,9 @@ python3 -m synadm_tui
 
 `synadm` selbst lässt sich üblicherweise mit `pipx install synadm` installieren. Vor dem ersten TUI-Start sollte `synadm version` im selben Benutzerkonto funktionieren.
 
-Falls `pipx` bereits installiert ist, kann `synadm` auch direkt unter **Weitere → synadm installieren/aktualisieren** nachinstalliert oder aktualisiert werden. Die TUI zeigt den Befehl und verlangt eine ausdrückliche Bestätigung; sie verwendet kein `sudo`.
+`synadm` kann direkt unter **Weitere → synadm installieren/aktualisieren** nachinstalliert oder aktualisiert werden. Fehlt `pipx`, fragt die TUI, ob es zunächst benutzerlokal über Python/pip installiert werden soll. Jeder Befehl wird vorher angezeigt und verlangt eine ausdrückliche Bestätigung.
+
+Unter **Weitere** stehen außerdem getrennte Aktionen zum Entfernen von `synadm` sowie zum vollständigen Entfernen von `synadm` und `pipx` bereit. `pipx` wird nicht automatisch entfernt, solange es noch andere Anwendungen verwaltet. Bei einer systemweiten Installation verwendet die TUI den erkannten Paketmanager; ohne Root-Rechte funktioniert dies nur mit einer bereits autorisierten passwortlosen `sudo`-Sitzung.
 
 ## Installation
 

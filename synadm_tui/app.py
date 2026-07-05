@@ -61,6 +61,7 @@ class App:
         self.server_version = "—"
         self.activities: list[Activity] = []
         self.pending_activity = ""
+        self.recheck_server_after_result = False
 
     def run(self) -> None:
         locale.setlocale(locale.LC_ALL, "")
@@ -147,6 +148,12 @@ class App:
         if spec.action == "install_synadm":
             self._install_synadm(screen)
             return
+        if spec.action == "uninstall_synadm":
+            self._uninstall_synadm(screen)
+            return
+        if spec.action == "uninstall_pipx":
+            self._uninstall_pipx(screen)
+            return
         extra_args = self._command_assistant(screen, spec)
         if extra_args is None:
             return
@@ -213,56 +220,118 @@ class App:
     def _install_synadm(self, screen: curses.window) -> None:
         pipx = shutil.which("pipx")
         if pipx is None:
-            self.status = "pipx wurde nicht gefunden"
-            self.output = (
-                "Für die automatische Installation wird pipx benötigt.\n\n"
-                "Debian/Ubuntu:  sudo apt install pipx\n"
-                "Fedora:         sudo dnf install pipx\n"
-                "Anschließend die TUI neu starten."
-            )
-            self.selection.output_offset = 0
+            python = shutil.which("python3")
+            if python is None:
+                self.status = "Python 3 und pipx wurden nicht gefunden"
+                self.output = "pipx benötigt Python 3. Bitte Python und pip über den System-Paketmanager installieren."
+                return
+            commands = [
+                [python, "-m", "pip", "install", "--user", "pipx"],
+                [python, "-m", "pipx", "install", "synadm"],
+            ]
+            if not self._confirm_package_action(
+                screen,
+                "pipx fehlt. pipx und anschließend synadm installieren?",
+                commands,
+            ):
+                self.status = "Installation abgebrochen"
+                return
+            self._launch_package_commands(commands, "pipx + synadm installieren", "pipx und synadm werden installiert …")
             return
         operation = "upgrade" if self._pipx_manages_synadm() else "install"
         command = [pipx, operation, "synadm"]
         question = "synadm aktualisieren?" if operation == "upgrade" else "synadm installieren?"
-        if not self._confirm_package_action(screen, question, command):
+        if not self._confirm_package_action(screen, question, [command]):
             self.status = "Installation abgebrochen"
             return
+        status = "synadm wird installiert …" if operation == "install" else "synadm wird aktualisiert …"
+        self._launch_package_commands([command], f"pipx {operation} synadm", status)
+
+    def _uninstall_synadm(self, screen: curses.window) -> None:
+        pipx = shutil.which("pipx")
+        if pipx is None or not self._pipx_manages_synadm():
+            self.status = "Keine pipx-Installation von synadm gefunden"
+            self.output = "Nur eine von pipx verwaltete synadm-Installation kann automatisch sauber entfernt werden."
+            return
+        command = [pipx, "uninstall", "synadm"]
+        if not self._confirm_package_action(screen, "synadm wirklich deinstallieren?", [command]):
+            self.status = "Deinstallation abgebrochen"
+            return
+        self._launch_package_commands([command], "synadm deinstallieren", "synadm wird entfernt …")
+
+    def _uninstall_pipx(self, screen: curses.window) -> None:
+        pipx = shutil.which("pipx")
+        if pipx is None:
+            self.status = "pipx wurde nicht gefunden"
+            self.output = "Es gibt keine gefundene pipx-Installation zum Entfernen."
+            return
+        other_apps = sorted(self._pipx_managed_apps() - {"synadm"})
+        if other_apps:
+            self.status = "pipx wird nicht entfernt: weitere Anwendungen vorhanden"
+            self.output = "Folgende pipx-Anwendungen würden ihre Verwaltung verlieren:\n\n" + "\n".join(f"  • {name}" for name in other_apps)
+            return
+        commands: list[list[str]] = []
+        if self._pipx_manages_synadm():
+            commands.append([pipx, "uninstall", "synadm"])
+        remove_command = self._pipx_remove_command(pipx)
+        if remove_command is None:
+            self.status = "pipx kann nicht automatisch entfernt werden"
+            self.output = "Der Installationsweg von pipx wurde nicht erkannt. Bitte pipx mit dem ursprünglichen Paketmanager entfernen."
+            return
+        commands.append(remove_command)
+        if not self._confirm_package_action(screen, "synadm und pipx vollständig entfernen?", commands):
+            self.status = "Deinstallation abgebrochen"
+            return
+        self._launch_package_commands(commands, "synadm + pipx entfernen", "synadm und pipx werden entfernt …")
+
+    def _launch_package_commands(self, commands: list[list[str]], label: str, status: str) -> None:
         self.running = True
-        self.pending_activity = f"pipx {operation} synadm"
-        self.status = "synadm wird installiert …" if operation == "install" else "synadm wird aktualisiert …"
-        self.output = "$ " + " ".join(shlex.quote(part) for part in command) + "\n\nWird ausgeführt …"
+        self.pending_activity = label
+        self.recheck_server_after_result = True
+        self.status = status
+        self.output = "\n".join("$ " + " ".join(shlex.quote(part) for part in command) for command in commands) + "\n\nWird ausgeführt …"
         self.selection.output_offset = 0
 
         def work() -> None:
             started = time.monotonic()
-            try:
-                process = subprocess.run(
-                    command,
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    timeout=300,
-                    check=False,
-                    env={**os.environ, "NO_COLOR": "1"},
-                )
-                result = Result(
-                    tuple(command),
-                    process.returncode,
-                    process.stdout,
-                    process.stderr,
-                    time.monotonic() - started,
-                )
-            except subprocess.TimeoutExpired as error:
-                stdout = error.stdout.decode(errors="replace") if isinstance(error.stdout, bytes) else (error.stdout or "")
-                stderr = error.stderr.decode(errors="replace") if isinstance(error.stderr, bytes) else (error.stderr or "")
-                result = Result(tuple(command), 124, stdout, stderr + "\nZeitlimit von 300 Sekunden überschritten.", time.monotonic() - started)
-            except OSError as error:
-                result = Result(tuple(command), 127, "", str(error), time.monotonic() - started)
-            self.events.put(result)
+            stdout_parts: list[str] = []
+            stderr_parts: list[str] = []
+            returncode = 0
+            for command in commands:
+                stdout_parts.append("$ " + " ".join(shlex.quote(part) for part in command))
+                try:
+                    process = subprocess.run(
+                        command,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        timeout=300,
+                        check=False,
+                        env={**os.environ, "NO_COLOR": "1"},
+                    )
+                    if process.stdout.strip():
+                        stdout_parts.append(process.stdout.strip())
+                    if process.stderr.strip():
+                        stderr_parts.append(process.stderr.strip())
+                    returncode = process.returncode
+                except subprocess.TimeoutExpired:
+                    returncode = 124
+                    stderr_parts.append("Zeitlimit von 300 Sekunden überschritten.")
+                except OSError as error:
+                    returncode = 127
+                    stderr_parts.append(str(error))
+                if returncode != 0:
+                    break
+            self.events.put(Result(
+                ("package-operation", label),
+                returncode,
+                "\n\n".join(stdout_parts),
+                "\n".join(stderr_parts),
+                time.monotonic() - started,
+            ))
 
-        threading.Thread(target=work, name="synadm-installer", daemon=True).start()
+        threading.Thread(target=work, name="synadm-package-manager", daemon=True).start()
 
     @staticmethod
     def _pipx_manages_synadm() -> bool:
@@ -271,6 +340,39 @@ class App:
             home / ".local" / "share" / "pipx" / "venvs",
             home / ".local" / "pipx" / "venvs",
         ))
+
+    @staticmethod
+    def _pipx_managed_apps() -> set[str]:
+        apps: set[str] = set()
+        home = Path.home()
+        for root in (home / ".local" / "share" / "pipx" / "venvs", home / ".local" / "pipx" / "venvs"):
+            try:
+                apps.update(path.name for path in root.iterdir() if path.is_dir())
+            except OSError:
+                continue
+        return apps
+
+    @staticmethod
+    def _pipx_remove_command(pipx: str) -> list[str] | None:
+        resolved = Path(pipx).resolve()
+        home = Path.home().resolve()
+        if resolved.is_relative_to(home):
+            python = shutil.which("python3")
+            return [python, "-m", "pip", "uninstall", "-y", "pipx"] if python else None
+        if os.geteuid() == 0:
+            prefix: list[str] = []
+        else:
+            sudo = shutil.which("sudo")
+            if sudo is None:
+                return None
+            prefix = [sudo, "-n"]
+        if shutil.which("apt-get"):
+            return [*prefix, "apt-get", "remove", "-y", "pipx"]
+        if shutil.which("dnf"):
+            return [*prefix, "dnf", "remove", "-y", "pipx"]
+        if shutil.which("pacman"):
+            return [*prefix, "pacman", "-R", "--noconfirm", "pipx"]
+        return None
 
     def _csv_import_wizard(self, screen: curses.window) -> None:
         path = self._choose_csv_file(screen)
@@ -464,7 +566,9 @@ class App:
         self.activities.insert(0, Activity(datetime.now().strftime("%H:%M:%S"), label, result.ok))
         del self.activities[8:]
         self.pending_activity = ""
-        if result.ok and result.command and Path(result.command[0]).name == "pipx":
+        recheck_server = self.recheck_server_after_result
+        self.recheck_server_after_result = False
+        if result.ok and recheck_server:
             self._start_server_check()
 
     def _start_server_check(self) -> None:
@@ -995,21 +1099,24 @@ class App:
             if key in (ord("n"), ord("N"), 27):
                 return False
 
-    def _confirm_package_action(self, screen: curses.window, question: str, command: list[str]) -> bool:
+    def _confirm_package_action(self, screen: curses.window, question: str, commands: list[list[str]]) -> bool:
         height, width = screen.getmaxyx()
         box_width = min(width - 4, 76)
-        window = curses.newwin(10, box_width, (height - 10) // 2, (width - box_width) // 2)
+        box_height = 10 + max(0, len(commands) - 1)
+        window = curses.newwin(box_height, box_width, (height - box_height) // 2, (width - box_width) // 2)
         window.keypad(True)
         selected = False
         while True:
             window.erase()
             window.box()
-            self._safe_add(window, 1, 2, "Paketinstallation", curses.A_BOLD | self._color(5))
+            self._safe_add(window, 1, 2, "Paketverwaltung", curses.A_BOLD | self._color(5))
             self._safe_add(window, 3, 2, question, curses.A_BOLD)
-            self._safe_add(window, 4, 2, "$ " + " ".join(shlex.quote(part) for part in command), self._color(1))
-            self._safe_add(window, 6, 2, "Benötigt Internetzugriff und ändert die pipx-Umgebung.", curses.A_DIM)
-            self._safe_add(window, 7, 2, "←/→ auswählen · Enter bestätigen · Esc abbrechen", curses.A_DIM)
-            self._draw_yes_no_buttons(window, 8, box_width, selected)
+            for row, command in enumerate(commands, start=4):
+                self._safe_add(window, row, 2, "$ " + " ".join(shlex.quote(part) for part in command), self._color(1))
+            hint_row = 5 + len(commands)
+            self._safe_add(window, hint_row, 2, "Benötigt ggf. Internetzugriff und ändert die pipx-Umgebung.", curses.A_DIM)
+            self._safe_add(window, hint_row + 1, 2, "←/→ auswählen · Enter bestätigen · Esc abbrechen", curses.A_DIM)
+            self._draw_yes_no_buttons(window, hint_row + 2, box_width, selected)
             window.refresh()
             key = window.getch()
             if key in (10, 13, curses.KEY_ENTER):

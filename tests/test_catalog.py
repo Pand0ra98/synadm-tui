@@ -14,6 +14,9 @@ class CatalogTests(unittest.TestCase):
         installer = next(command for command in commands if command.action == "install_synadm")
         self.assertTrue(installer.dangerous)
         self.assertEqual(installer.argv, ())
+        package_actions = {command.action for command in commands}
+        self.assertIn("uninstall_synadm", package_actions)
+        self.assertIn("uninstall_pipx", package_actions)
 
 
 if __name__ == "__main__":
