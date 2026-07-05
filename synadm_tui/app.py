@@ -20,6 +20,7 @@ from pathlib import Path
 from .catalog import SECTIONS, Command
 from .command_help import command_info
 from .assistants import fields_for
+from .block_art import load_block_cells
 from .configuration import OUTPUT_FORMATS, SynadmConfig, backup_synadm_config, write_synadm_config
 from .edition import Edition, STANDARD_EDITION
 from .csv_import import (
@@ -229,6 +230,7 @@ class App:
         self.inline_images_supported = supports_kitty_graphics()
         self.inline_image_signature: tuple[object, ...] | None = None
         self.pending_inline_image: tuple[Path, int, int, int, int] | None = None
+        self.block_color_pairs: dict[tuple[int, int], int] = {}
 
     def run(self) -> None:
         locale.setlocale(locale.LC_ALL, "")
@@ -255,6 +257,7 @@ class App:
             self._handle_key(screen, key)
 
     def _init_colors(self) -> None:
+        self.block_color_pairs.clear()
         if not curses.has_colors():
             return
         curses.start_color()
@@ -1142,6 +1145,8 @@ class App:
                     curses.A_BOLD | self._color(1),
                 )
                 return
+            if self._draw_block_theme(screen, y, x, width, height):
+                return
             crest_width = max(len(line) for line in self.theme.art)
             crest_x = x + max(2, (width - crest_width) // 2)
             for line_no, line in enumerate(self.theme.art[: max(0, height - 4)]):
@@ -1179,6 +1184,51 @@ class App:
             self.inline_image_signature = None
             return
         self.inline_image_signature = signature
+
+    def _draw_block_theme(
+        self,
+        screen: curses.window,
+        y: int,
+        x: int,
+        width: int,
+        height: int,
+    ) -> bool:
+        if not curses.has_colors() or getattr(curses, "COLORS", 0) < 256:
+            return False
+        rows = load_block_cells(self.theme.key)
+        if not rows or len(rows) > height - 4:
+            return False
+        art_width = len(rows[0])
+        start_x = x + max(2, (width - art_width) // 2)
+        start_y = y + 2
+        for row_index, row in enumerate(rows):
+            for column_index, cell in enumerate(row):
+                if cell is None:
+                    continue
+                attr = self._block_color(cell.foreground, cell.background)
+                self._safe_add(screen, start_y + row_index, start_x + column_index, cell.character, attr)
+        label = self.theme.ready_label
+        self._safe_add(
+            screen, min(y + height - 2, start_y + len(rows) + 1),
+            x + max(2, (width - len(label)) // 2), label[: width - 4],
+            curses.A_BOLD | self._color(1),
+        )
+        return True
+
+    def _block_color(self, foreground: int, background: int) -> int:
+        key = (foreground, background)
+        pair = self.block_color_pairs.get(key)
+        if pair is not None:
+            return curses.color_pair(pair)
+        pair = 16 + len(self.block_color_pairs)
+        if pair >= getattr(curses, "COLOR_PAIRS", 0):
+            return curses.A_BOLD | self._color(6)
+        try:
+            curses.init_pair(pair, foreground, background)
+        except curses.error:
+            return curses.A_BOLD | self._color(6)
+        self.block_color_pairs[key] = pair
+        return curses.color_pair(pair)
 
     def _clear_inline_image(self) -> None:
         if self.inline_image_signature is None:

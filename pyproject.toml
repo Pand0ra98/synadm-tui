@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "synadm-tui"
-version = "0.13"
+version = "0.14"
 description = "Terminal-Oberflaeche fuer die Matrix-Synapse-Administration mit synadm"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,7 +22,7 @@ synadm-tui = "synadm_tui.cli:main"
 include = ["synadm_tui*"]
 
 [tool.setuptools.package-data]
-synadm_tui = ["assets/*.png"]
+synadm_tui = ["assets/*.png", "assets/*.block.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

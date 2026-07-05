@@ -27,7 +27,8 @@ python3 -m synadm_tui
 - getrennte **Standard Edition** und **Thüringen Edition** aus derselben Codebasis
 - umschaltbare Themen **Retro Cyberspace 198X**, **Matrix**, **Hacker Terminal**, **Hoher Kontrast** und **Monochrom**
 - zusätzliches Thüringen-Thema mit Wappen ausschließlich in der Thüringen Edition
-- transparente PNG-Embleme für Thüringen, Retro Cyberspace und Hacker Terminal in Kitty-, WezTerm- und Ghostty-kompatiblen Terminals; portabler Text-Fallback über SSH und in klassischen Terminals
+- transparente PNG-Embleme für Thüringen, Retro Cyberspace und Hacker Terminal in Kitty-, WezTerm- und Ghostty-kompatiblen Terminals
+- farbiger Unicode-Halbblock-Renderer für Alacritty, Zellij und andere 256-Farben-Terminals; Text-Fallback für stark eingeschränkte Terminals
 - kräftige Doppelrahmen, thematische Startgrafiken und zentrierte Paneltitel
 - nicht blockierende Ausführung; die Oberfläche bleibt während eines API-Aufrufs bedienbar
 - formatierte JSON-Ausgabe mit Scrollfunktion
@@ -160,7 +161,7 @@ In Ja/Nein-Dialogen wird die gewünschte Schaltfläche mit `←`/`→` gewählt 
 
 Die Themenauswahl ist jederzeit mit `t` sowie unter **Weitere → Darstellung / Thema wählen** erreichbar. Mit `↑`/`↓` wird die Farbgebung live ausprobiert, `Enter` speichert sie editionsabhängig unter `~/.config/synadm-tui/`, und `Esc` stellt das vorherige Thema wieder her.
 
-Die Standard Edition enthält die generierten Embleme `retro-cyberspace.png` und `hacker-terminal.png`; die Thüringen Edition ergänzt `thueringen-wappen.png`. Unterstützt das Terminal das Kitty-Grafikprotokoll – beispielsweise Kitty, WezTerm oder Ghostty –, erscheint das zum aktiven Thema passende transparente PNG direkt im Detailbereich. In anderen Terminals und typischen SSH-Sitzungen wird automatisch die portable Textgrafik verwendet; alle Funktionen bleiben identisch.
+Die Standard Edition enthält die generierten Embleme `retro-cyberspace.png` und `hacker-terminal.png`; die Thüringen Edition ergänzt `thueringen-wappen.png`. Unterstützt das Terminal das Kitty-Grafikprotokoll – beispielsweise Kitty, WezTerm oder Ghostty –, erscheint das zum aktiven Thema passende transparente PNG direkt im Detailbereich. Unter Alacritty, innerhalb von Zellij und in anderen 256-Farben-Terminals zeichnet die TUI automatisch eine kompakte farbige Annäherung mit Unicode-Halbblöcken. Nur wenn auch das nicht möglich ist, wird die reine Textgrafik verwendet. Sixel wird dafür nicht benötigt; alle Funktionen bleiben identisch.
 
 ## Sicherheit
 
@@ -182,7 +183,8 @@ Die Standard Edition enthält die generierten Embleme `retro-cyberspace.png` und
 | `command_help.py` | Beschreibungen, Beispiele und Schreibschutz-Kennzeichnung |
 | `configuration.py` | Validierung, Sicherung und atomare synadm-Konfiguration |
 | `edition.py` | gemeinsame Editionsprofile ohne duplizierten Anwendungscode |
-| `terminal_image.py` | optionale transparente PNG-Darstellung mit sicherem Text-Fallback |
+| `terminal_image.py` | optionale transparente PNG-Darstellung über das Kitty-Grafikprotokoll |
+| `block_art.py` | protokollfreie 256-Farben-Darstellung für Alacritty und Multiplexer |
 | `csv_import.py` | CSV-Erkennung, Validierung und Importplanung |
 | `file_browser.py` | Dateibrowser für CSV-Dateien |
 

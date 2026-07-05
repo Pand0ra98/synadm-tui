@@ -28,9 +28,12 @@ def main() -> int:
             f"--workpath={ROOT / 'build' / 'pyinstaller' / name}",
             f"--specpath={ROOT / 'build'}",
         ]
-        assets = ["retro-cyberspace.png", "hacker-terminal.png"]
+        assets = [
+            "retro-cyberspace.png", "hacker-terminal.png",
+            "cyberspace.block.json", "hacker.block.json",
+        ]
         if name == "synadm-tui-thueringen":
-            assets.append("thueringen-wappen.png")
+            assets.extend(("thueringen-wappen.png", "thuringia.block.json"))
         for asset in assets:
             arguments.append(
                 f"--add-data={ROOT / 'synadm_tui' / 'assets' / asset}:synadm_tui/assets"
