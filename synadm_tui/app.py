@@ -8,6 +8,8 @@ import locale
 import os
 import queue
 import shlex
+import shutil
+import subprocess
 import threading
 import textwrap
 import time
@@ -142,6 +144,9 @@ class App:
         if spec.action == "csv_import":
             self._csv_import_wizard(screen)
             return
+        if spec.action == "install_synadm":
+            self._install_synadm(screen)
+            return
         extra_args = self._command_assistant(screen, spec)
         if extra_args is None:
             return
@@ -204,6 +209,68 @@ class App:
             self.events.put(self.runner.run(args, structured="--help" not in args and "-h" not in args))
 
         threading.Thread(target=work, name="synadm-runner", daemon=True).start()
+
+    def _install_synadm(self, screen: curses.window) -> None:
+        pipx = shutil.which("pipx")
+        if pipx is None:
+            self.status = "pipx wurde nicht gefunden"
+            self.output = (
+                "Für die automatische Installation wird pipx benötigt.\n\n"
+                "Debian/Ubuntu:  sudo apt install pipx\n"
+                "Fedora:         sudo dnf install pipx\n"
+                "Anschließend die TUI neu starten."
+            )
+            self.selection.output_offset = 0
+            return
+        operation = "upgrade" if self._pipx_manages_synadm() else "install"
+        command = [pipx, operation, "synadm"]
+        question = "synadm aktualisieren?" if operation == "upgrade" else "synadm installieren?"
+        if not self._confirm_package_action(screen, question, command):
+            self.status = "Installation abgebrochen"
+            return
+        self.running = True
+        self.pending_activity = f"pipx {operation} synadm"
+        self.status = "synadm wird installiert …" if operation == "install" else "synadm wird aktualisiert …"
+        self.output = "$ " + " ".join(shlex.quote(part) for part in command) + "\n\nWird ausgeführt …"
+        self.selection.output_offset = 0
+
+        def work() -> None:
+            started = time.monotonic()
+            try:
+                process = subprocess.run(
+                    command,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=300,
+                    check=False,
+                    env={**os.environ, "NO_COLOR": "1"},
+                )
+                result = Result(
+                    tuple(command),
+                    process.returncode,
+                    process.stdout,
+                    process.stderr,
+                    time.monotonic() - started,
+                )
+            except subprocess.TimeoutExpired as error:
+                stdout = error.stdout.decode(errors="replace") if isinstance(error.stdout, bytes) else (error.stdout or "")
+                stderr = error.stderr.decode(errors="replace") if isinstance(error.stderr, bytes) else (error.stderr or "")
+                result = Result(tuple(command), 124, stdout, stderr + "\nZeitlimit von 300 Sekunden überschritten.", time.monotonic() - started)
+            except OSError as error:
+                result = Result(tuple(command), 127, "", str(error), time.monotonic() - started)
+            self.events.put(result)
+
+        threading.Thread(target=work, name="synadm-installer", daemon=True).start()
+
+    @staticmethod
+    def _pipx_manages_synadm() -> bool:
+        home = Path.home()
+        return any((root / "synadm").is_dir() for root in (
+            home / ".local" / "share" / "pipx" / "venvs",
+            home / ".local" / "pipx" / "venvs",
+        ))
 
     def _csv_import_wizard(self, screen: curses.window) -> None:
         path = self._choose_csv_file(screen)
@@ -397,6 +464,8 @@ class App:
         self.activities.insert(0, Activity(datetime.now().strftime("%H:%M:%S"), label, result.ok))
         del self.activities[8:]
         self.pending_activity = ""
+        if result.ok and result.command and Path(result.command[0]).name == "pipx":
+            self._start_server_check()
 
     def _start_server_check(self) -> None:
         if not self.runner.available:
@@ -924,6 +993,32 @@ class App:
             if key in (ord("j"), ord("J"), ord("y"), ord("Y")):
                 return True
             if key in (ord("n"), ord("N"), 27):
+                return False
+
+    def _confirm_package_action(self, screen: curses.window, question: str, command: list[str]) -> bool:
+        height, width = screen.getmaxyx()
+        box_width = min(width - 4, 76)
+        window = curses.newwin(10, box_width, (height - 10) // 2, (width - box_width) // 2)
+        window.keypad(True)
+        selected = False
+        while True:
+            window.erase()
+            window.box()
+            self._safe_add(window, 1, 2, "Paketinstallation", curses.A_BOLD | self._color(5))
+            self._safe_add(window, 3, 2, question, curses.A_BOLD)
+            self._safe_add(window, 4, 2, "$ " + " ".join(shlex.quote(part) for part in command), self._color(1))
+            self._safe_add(window, 6, 2, "Benötigt Internetzugriff und ändert die pipx-Umgebung.", curses.A_DIM)
+            self._safe_add(window, 7, 2, "←/→ auswählen · Enter bestätigen · Esc abbrechen", curses.A_DIM)
+            self._draw_yes_no_buttons(window, 8, box_width, selected)
+            window.refresh()
+            key = window.getch()
+            if key in (10, 13, curses.KEY_ENTER):
+                return selected
+            if key in (curses.KEY_LEFT, curses.KEY_RIGHT, 9, ord("h"), ord("l")):
+                selected = not selected
+            elif key in (ord("j"), ord("J"), ord("y"), ord("Y")):
+                return True
+            elif key in (ord("n"), ord("N"), 27):
                 return False
 
     def _status_color(self) -> int:

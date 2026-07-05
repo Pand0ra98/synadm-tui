@@ -11,6 +11,9 @@ class CatalogTests(unittest.TestCase):
         self.assertTrue(any(not command.argv for command in commands))
         room_delete = next(command for command in commands if command.title == "Raum löschen")
         self.assertTrue(room_delete.dangerous)
+        installer = next(command for command in commands if command.action == "install_synadm")
+        self.assertTrue(installer.dangerous)
+        self.assertEqual(installer.argv, ())
 
 
 if __name__ == "__main__":

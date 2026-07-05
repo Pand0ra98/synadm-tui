@@ -1,5 +1,6 @@
 import curses
 import unittest
+from unittest.mock import patch
 
 from synadm_tui.app import App
 from synadm_tui.runner import Result, SynadmRunner
@@ -40,6 +41,12 @@ class NavigationTests(unittest.TestCase):
         self.app._collect_result()
         self.assertEqual(self.app.activities[0].label, "user list")
         self.assertTrue(self.app.activities[0].ok)
+
+    @patch("synadm_tui.app.shutil.which", return_value=None)
+    def test_installer_explains_missing_pipx(self, _which) -> None:
+        self.app._install_synadm(None)  # type: ignore[arg-type]
+        self.assertIn("pipx wurde nicht gefunden", self.app.status)
+        self.assertIn("sudo apt install pipx", self.app.output)
 
 
 if __name__ == "__main__":

@@ -30,6 +30,7 @@ python3 -m synadm_tui
 - sichere Prozessaufrufe als Argumentliste, ohne Shell-Auswertung
 - geführte Eingabeassistenten für Suche, IDs, Limits und Benutzeränderungen
 - alternative `synadm`-Binärdatei und Konfiguration per Startoption
+- geführte Installation beziehungsweise Aktualisierung von `synadm` über `pipx`
 - geführter CSV-Import mit Trennzeichenerkennung, Spaltenzuordnung und Vorschau
 - nur Python-Standardbibliothek; keine Laufzeitabhängigkeiten
 
@@ -40,6 +41,8 @@ python3 -m synadm_tui
 - ein Admin-Zugriffstoken in der `synadm`-Konfiguration
 
 `synadm` selbst lässt sich üblicherweise mit `pipx install synadm` installieren. Vor dem ersten TUI-Start sollte `synadm version` im selben Benutzerkonto funktionieren.
+
+Falls `pipx` bereits installiert ist, kann `synadm` auch direkt unter **Weitere → synadm installieren/aktualisieren** nachinstalliert oder aktualisiert werden. Die TUI zeigt den Befehl und verlangt eine ausdrückliche Bestätigung; sie verwendet kein `sudo`.
 
 ## Installation
 

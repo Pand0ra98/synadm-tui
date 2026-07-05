@@ -77,6 +77,7 @@ SECTIONS = (
     Section(
         "Weitere",
         (
+            Command("synadm installieren/aktualisieren", (), "Installation mit pipx", True, "install_synadm"),
             Command("Servernachricht senden", ("notice", "send"), "OPTIONEN"),
             Command("History-Purge", ("history", "purge"), "OPTIONEN", True),
             Command("Eigener synadm-Befehl", (), "z. B. user list --limit 20"),
