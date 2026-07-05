@@ -182,6 +182,19 @@ class Activity:
     ok: bool
 
 
+@dataclass(frozen=True, slots=True)
+class PanelLayout:
+    body_y: int
+    body_height: int
+    left_width: int
+    sections_y: int
+    sections_height: int
+    quick_y: int
+    quick_height: int
+    command_x: int
+    command_width: int
+
+
 class App:
     def __init__(
         self,
@@ -227,6 +240,13 @@ class App:
             curses.set_escdelay(35)
         curses.curs_set(0)
         screen.keypad(True)
+        mouse_events = curses.BUTTON1_CLICKED | curses.BUTTON1_DOUBLE_CLICKED
+        try:
+            curses.mousemask(mouse_events)
+            if hasattr(curses, "mouseinterval"):
+                curses.mouseinterval(150)
+        except curses.error:
+            pass
         screen.timeout(100)
         self._init_colors()
         self._start_server_check()
@@ -283,6 +303,9 @@ class App:
         return True
 
     def _handle_key(self, screen: curses.window, key: int) -> None:
+        if key == curses.KEY_MOUSE:
+            self._handle_mouse(screen)
+            return
         if not self.running and key in (ord("?"),):
             self._clear_inline_image()
             self._show_keyboard_help(screen)
@@ -345,6 +368,78 @@ class App:
                 self._launch(args)
         elif key == curses.KEY_HOME:
             self.selection.output_offset = 0
+
+    @staticmethod
+    def _panel_layout(height: int, width: int) -> PanelLayout | None:
+        if height < 22 or width < 90:
+            return None
+        body_y = 2
+        body_height = height - 4
+        left_width = min(30, max(24, width // 5))
+        command_width = min(42, max(30, width // 3))
+        server_height = 6
+        sections_height = len(SECTIONS) + 3
+        quick_height = body_height - server_height - sections_height
+        sections_y = body_y + server_height
+        return PanelLayout(
+            body_y=body_y,
+            body_height=body_height,
+            left_width=left_width,
+            sections_y=sections_y,
+            sections_height=sections_height,
+            quick_y=sections_y + sections_height,
+            quick_height=quick_height,
+            command_x=left_width + 1,
+            command_width=command_width,
+        )
+
+    def _handle_mouse(self, screen: curses.window) -> None:
+        if self.running:
+            return
+        try:
+            _mouse_id, mouse_x, mouse_y, _z, button_state = curses.getmouse()
+        except curses.error:
+            return
+        accepted = curses.BUTTON1_CLICKED | curses.BUTTON1_DOUBLE_CLICKED
+        if not button_state & accepted:
+            return
+        height, width = screen.getmaxyx()
+        layout = self._panel_layout(height, width)
+        if layout is None:
+            return
+
+        section_index = mouse_y - (layout.sections_y + 1)
+        if 0 <= mouse_x < layout.left_width and 0 <= section_index < len(SECTIONS):
+            self.selection.section = section_index
+            self.selection.command = 0
+            self.selection.output_offset = 0
+            self.focus = "commands"
+            self.show_command_details = True
+            return
+
+        command_index = mouse_y - (layout.body_y + 2)
+        visible_commands = SECTIONS[self.selection.section].commands[: layout.body_height - 4]
+        if (
+            layout.command_x <= mouse_x < layout.command_x + layout.command_width
+            and 0 <= command_index < len(visible_commands)
+        ):
+            self.selection.command = command_index
+            self.selection.output_offset = 0
+            self.focus = "commands"
+            self.show_command_details = True
+            self._prepare_command(screen)
+            return
+
+        quick_index = mouse_y - (layout.quick_y + 1)
+        quick_actions = (
+            ("Benutzer", "Benutzer ändern"),
+            ("Benutzer", "Benutzer aus CSV importieren"),
+            ("Benutzer", "Benutzer suchen"),
+        )
+        if 0 <= mouse_x < layout.left_width and 0 <= quick_index < len(quick_actions):
+            self._select_command(*quick_actions[quick_index])
+            self.show_command_details = True
+            self._prepare_command(screen)
 
     def _prepare_command(self, screen: curses.window) -> None:
         self._clear_inline_image()
@@ -1058,29 +1153,35 @@ class App:
         self._safe_add(screen, 0, width - len(connection) - 2, connection, curses.A_BOLD | self._color(8))
         self._safe_add(screen, 1, 0, "═" * (width - 1), curses.A_BOLD | self._color(1))
 
-        body_y = 2
-        body_height = height - 4
-        left_width = min(30, max(24, width // 5))
-        command_width = min(42, max(30, width // 3))
-        command_x = left_width + 1
-        output_x = command_x + command_width + 1
+        layout = self._panel_layout(height, width)
+        assert layout is not None
+        output_x = layout.command_x + layout.command_width + 1
         output_width = width - output_x
 
-        server_height = 6
-        sections_height = len(SECTIONS) + 3
-        quick_height = body_height - server_height - sections_height
-        self._draw_server_panel(screen, body_y, 0, left_width, server_height)
-        self._draw_sections(screen, body_y + server_height, 0, left_width, sections_height)
-        self._draw_quick_actions(screen, body_y + server_height + sections_height, 0, left_width, quick_height)
-        self._draw_commands(screen, body_y, command_x, command_width, body_height)
+        self._draw_server_panel(screen, layout.body_y, 0, layout.left_width, 6)
+        self._draw_sections(
+            screen, layout.sections_y, 0, layout.left_width, layout.sections_height
+        )
+        self._draw_quick_actions(
+            screen, layout.quick_y, 0, layout.left_width, layout.quick_height
+        )
+        self._draw_commands(
+            screen,
+            layout.body_y,
+            layout.command_x,
+            layout.command_width,
+            layout.body_height,
+        )
 
-        details_height = max(11, body_height * 2 // 3)
-        activity_height = body_height - details_height
-        self._draw_output(screen, body_y, output_x, output_width, details_height)
-        self._draw_activity(screen, body_y + details_height, output_x, output_width, activity_height)
+        details_height = max(11, layout.body_height * 2 // 3)
+        activity_height = layout.body_height - details_height
+        self._draw_output(screen, layout.body_y, output_x, output_width, details_height)
+        self._draw_activity(
+            screen, layout.body_y + details_height, output_x, output_width, activity_height
+        )
 
         self._safe_add(screen, height - 2, 0, "═" * (width - 1), curses.A_BOLD | self._color(1))
-        footer = f"{self.edition.name} · {self.theme.name}  │  ? Hilfe  t Thema  ↑/↓ wählen  Enter öffnen  q Ende"
+        footer = f"{self.edition.name} · {self.theme.name}  │  Maus/↑/↓ wählen  Enter öffnen  ? Hilfe  q Ende"
         self._safe_add(screen, height - 1, 2, footer[: width - 4], curses.A_DIM)
         screen.refresh()
         self._sync_inline_image()

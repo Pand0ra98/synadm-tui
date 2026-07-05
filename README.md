@@ -23,7 +23,7 @@ python3 -m synadm_tui
 
 ## Eigenschaften
 
-- übersichtliche Drei-Spalten-Navigation ohne Maus
+- übersichtliche Drei-Spalten-Navigation mit Tastatur- und Maussteuerung
 - neutrale **Standard Edition** ohne regionale Branding-Ressourcen
 - umschaltbare Themen **Retro Cyberspace 198X**, **Matrix**, **Hacker Terminal**, **Hoher Kontrast** und **Monochrom**
 - transparente PNG-Embleme für Retro Cyberspace und Hacker Terminal in Kitty-, WezTerm- und Ghostty-kompatiblen Terminals
@@ -112,6 +112,9 @@ sha256sum --check SHA256SUMS
 
 Das Ergebnis enthält jeweils ein DEB- und RPM-Paket. Die Build-Architektur wird automatisch auf `amd64`/`x86_64` beziehungsweise `arm64`/`aarch64` abgebildet. Das Skript verweigert die Paketierung, wenn die Versionsnummer der nativen Datei nicht zu `pyproject.toml` passt.
 
+Offizielle RPM-Builds werden automatisch mit dem Schlüssel
+`A589 2362 4002 F769 A768 3FD6 C187 58AE CA92 C968` signiert, wenn dessen privater Teil unter `~/.local/share/synadm-tui/rpm-signing/` vorhanden ist. Im Repository liegt ausschließlich der öffentliche Schlüssel. Fremde lokale Builds bleiben ohne privaten Schlüssel unsigniert.
+
 Die aktuellen Linux-Dateien benötigen mindestens glibc 2.34. Für eine möglichst breite Kompatibilität sollten Release-Dateien später in einer festgelegten, älteren Build-Umgebung erzeugt werden.
 
 ### Manuell in Gitea veröffentlichen
@@ -153,12 +156,12 @@ Dieser Ablauf wurde mit Version 0.15 in einer isolierten APT-Umgebung geprüft: 
 Fedora, RHEL und kompatible Systeme:
 
 ```bash
-sudo curl -fsSL https://git.blackwall.ipv64.de/api/packages/pan/rpm.repo \
+sudo curl -fsSL https://git.blackwall.ipv64.de/pan/synadm-tui/raw/branch/main/packaging/synadm-tui.repo \
   -o /etc/yum.repos.d/synadm-tui.repo
 sudo dnf install synadm-tui
 ```
 
-**Hinweis zum aktuellen RPM-Status:** Repository-Metadaten, SHA256-Prüfsummen, Paketinhalt und Programmstart von Version 0.15 wurden geprüft. Ein realer Test unter Fedora 42 mit DNF5 lädt Repository und Paket korrekt, beendet die Transaktion aber mit `The package is not signed`. Die von Gitea erzeugte Repository-Datei aktiviert `gpgcheck=1`, während die bisher veröffentlichten RPM-Dateien noch keine eingebettete Paketsignatur besitzen. Eine Installation über DNF sollte deshalb erst nach Einrichtung eines dauerhaften RPM-Signaturschlüssels freigegeben werden; `gpgcheck` sollte nicht als Behelf deaktiviert werden.
+Ab Version 0.16 besitzen die RPM-Pakete eine eingebettete RSA/SHA512-Signatur. Die projektspezifische `.repo`-Datei lässt `gpgcheck=1` aktiviert und verweist auf den zugehörigen öffentlichen Schlüssel. Signatur und Installation werden vor einem Release in Fedora mit DNF5 geprüft.
 
 Die separat gepflegte [Thüringen Edition](https://git.blackwall.ipv64.de/pan/synadm-tui-thueringen) verwendet denselben Anwendungskern, bringt ihr Branding und ihre Pakete aber in einem eigenen Repository mit.
 
@@ -172,6 +175,7 @@ Zuerst wird eine neue Version des neutralen Kernprojekts getestet, getaggt und v
 |---|---|
 | `↑` / `↓`, `k` / `j` | In der aktiven Spalte auswählen |
 | `Enter` | Bereich bestätigen beziehungsweise Befehl ausführen |
+| Linksklick | Bereich auswählen beziehungsweise angeklickten Befehl direkt öffnen |
 | `←`, `Esc`, `h` | Von den Befehlen zurück zur Bereichsauswahl |
 | `n` | Benutzer anlegen |
 | `i` | CSV-Import öffnen |

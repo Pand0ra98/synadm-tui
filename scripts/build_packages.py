@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import platform
 import shutil
 import subprocess
@@ -19,6 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
 OUTPUT = DIST / "packages"
 HOMEPAGE = "https://git.blackwall.ipv64.de/pan/synadm-tui"
+DEFAULT_RPM_SIGNING_HOME = Path.home() / ".local" / "share" / "synadm-tui" / "rpm-signing"
 
 
 @dataclass(frozen=True)
@@ -212,7 +214,54 @@ def build_rpm(version: str, rpm_arch: str) -> list[Path]:
         target = OUTPUT / built.name
         shutil.copy2(built, target)
         artifacts.append(target)
+    sign_rpms(artifacts)
     return artifacts
+
+
+def rpm_signing_settings() -> tuple[str, Path] | None:
+    key_file = ROOT / "packaging" / "RPM-SIGNING-KEY-ID"
+    key_id = os.environ.get("SYNADM_RPM_SIGNING_KEY", "").strip()
+    if not key_id:
+        try:
+            key_id = key_file.read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+    signing_home = Path(
+        os.environ.get("SYNADM_RPM_GNUPGHOME", str(DEFAULT_RPM_SIGNING_HOME))
+    ).expanduser()
+    private_keys = signing_home / "private-keys-v1.d"
+    if not private_keys.is_dir() or not any(private_keys.iterdir()):
+        print("Hinweis: Kein privater RPM-Schlüssel vorhanden; RPM bleibt unsigniert.", file=sys.stderr)
+        return None
+    return key_id, signing_home
+
+
+def sign_rpms(artifacts: list[Path]) -> None:
+    settings = rpm_signing_settings()
+    if settings is None:
+        return
+    rpmsign = shutil.which("rpmsign")
+    if not rpmsign:
+        raise SystemExit("rpmsign fehlt; unter Debian/Ubuntu das Paket rpm installieren.")
+    key_id, signing_home = settings
+    environment = os.environ.copy()
+    environment["GNUPGHOME"] = str(signing_home)
+    for artifact in artifacts:
+        subprocess.run(
+            [
+                rpmsign,
+                "--addsign",
+                "--define",
+                f"_gpg_name {key_id}",
+                "--define",
+                f"_gpg_path {signing_home}",
+                "--define",
+                "__gpg /usr/bin/gpg",
+                str(artifact),
+            ],
+            check=True,
+            env=environment,
+        )
 
 
 def checksum_file(artifacts: list[Path]) -> Path:

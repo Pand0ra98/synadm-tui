@@ -17,7 +17,7 @@ SPEC.loader.exec_module(build_packages)
 
 class PackageBuildTests(unittest.TestCase):
     def test_project_version_matches_current_release(self) -> None:
-        self.assertEqual(build_packages.project_version(), "0.15")
+        self.assertEqual(build_packages.project_version(), "0.16")
 
     def test_supported_architecture_mapping(self) -> None:
         with mock.patch.object(build_packages.platform, "machine", return_value="x86_64"):
@@ -25,11 +25,15 @@ class PackageBuildTests(unittest.TestCase):
 
     def test_rpm_spec_contains_expected_binary(self) -> None:
         edition = build_packages.EDITIONS[0]
-        spec = build_packages.rpm_spec(edition, "0.15", "x86_64")
+        spec = build_packages.rpm_spec(edition, "0.16", "x86_64")
         self.assertIn("Name:           synadm-tui", spec)
         self.assertIn("%{_bindir}/synadm-tui", spec)
         self.assertIn("Requires:       glibc >= 2.34", spec)
         self.assertIn("Requires:       zlib", spec)
+
+    def test_official_rpm_signing_key_is_declared(self) -> None:
+        key = (ROOT / "packaging" / "RPM-SIGNING-KEY-ID").read_text(encoding="utf-8").strip()
+        self.assertEqual(key, "A58923624002F769A7683FD6C18758AECA92C968")
 
 
 if __name__ == "__main__":

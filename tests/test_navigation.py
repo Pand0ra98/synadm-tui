@@ -1,6 +1,6 @@
 import curses
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from synadm_tui.app import App, WIZARD_BACK
 from synadm_tui.catalog import SECTIONS
@@ -25,6 +25,43 @@ class NavigationTests(unittest.TestCase):
         self.app.focus = "commands"
         self.app._handle_key(None, curses.KEY_LEFT)  # type: ignore[arg-type]
         self.assertEqual(self.app.focus, "sections")
+
+    @patch("synadm_tui.app.App._prepare_command")
+    @patch("synadm_tui.app.curses.getmouse")
+    def test_mouse_selects_users_and_opens_user_search(self, getmouse, prepare) -> None:
+        screen = Mock()
+        screen.getmaxyx.return_value = (40, 140)
+        layout = self.app._panel_layout(40, 140)
+        assert layout is not None
+        users_index = next(index for index, section in enumerate(SECTIONS) if section.title == "Benutzer")
+        getmouse.return_value = (
+            0,
+            3,
+            layout.sections_y + 1 + users_index,
+            0,
+            curses.BUTTON1_CLICKED,
+        )
+        self.app._handle_key(screen, curses.KEY_MOUSE)
+        self.assertEqual(self.app.selection.section, users_index)
+        self.assertEqual(self.app.focus, "commands")
+        prepare.assert_not_called()
+
+        search_index = next(
+            index
+            for index, command in enumerate(SECTIONS[users_index].commands)
+            if command.title == "Benutzer suchen"
+        )
+        getmouse.return_value = (
+            0,
+            layout.command_x + 3,
+            layout.body_y + 2 + search_index,
+            0,
+            curses.BUTTON1_CLICKED,
+        )
+        self.app._handle_key(screen, curses.KEY_MOUSE)
+        self.assertEqual(self.app.selection.command, search_index)
+        self.assertEqual(self.app.current_command.title, "Benutzer suchen")
+        prepare.assert_called_once_with(screen)
 
     def test_section_selection_wraps(self) -> None:
         self.app._handle_key(None, curses.KEY_UP)  # type: ignore[arg-type]
