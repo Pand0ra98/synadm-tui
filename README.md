@@ -33,23 +33,6 @@ python3 -m synadm_tui
 - geführter CSV-Import mit Trennzeichenerkennung, Spaltenzuordnung und Vorschau
 - nur Python-Standardbibliothek; keine Laufzeitabhängigkeiten
 
-## Oberfläche
-
-```text
-┌ Server ───────┐ ┌ Benutzer ───────────┐ ┌ Details / Ausgabe ──────────┐
-│ ● Verbunden   │ │   Benutzer auflisten│ │ formatierte synadm-Ausgabe  │
-│ Synapse 1.x   │ │ ! CSV importieren   │ │ und Fehlermeldungen         │
-├ Bereiche ─────┤ │   Benutzer suchen   │ ├ Aktivität ──────────────────┤
-│ › Benutzer    │ │   Benutzerdetails   │ │ 10:24 ✓ user list           │
-│   Räume       │ └─────────────────────┘ └─────────────────────────────┘
-├ Schnellaktion ┤
-│ n  neu        │
-│ i  CSV-Import │
-└───────────────┘
-```
-
-Gelbe, mit `!` markierte Befehle verändern oder löschen Daten und verlangen eine zusätzliche Bestätigung.
-
 ## Voraussetzungen
 
 - Python 3.10 oder neuer auf Linux/macOS
@@ -75,6 +58,28 @@ Alternative Programm- oder Konfigurationspfade:
 synadm-tui --synadm /opt/synadm/bin/synadm \
   --config-file ~/.config/synadm.yaml --timeout 90
 ```
+
+## Einzelne ausführbare Datei bauen
+
+Ohne zusätzliche Build-Abhängigkeiten kann eine einzelne ausführbare Datei erzeugt werden:
+
+```bash
+python3 scripts/build_executable.py
+./dist/synadm-tui --version
+./dist/synadm-tui
+```
+
+Die erzeugte Datei `dist/synadm-tui` enthält den gesamten Anwendungscode und kann direkt kopiert werden. Auf dem Zielsystem werden weiterhin Python 3.10+ sowie das separat installierte Programm `synadm` benötigt.
+
+Für eine vollständig native Datei, die kein installiertes Python benötigt:
+
+```bash
+python3 -m pip install pyinstaller
+python3 scripts/build_native.py
+./dist/synadm-tui-native --version
+```
+
+PyInstaller ist bewusst nur eine Build- und keine Laufzeitabhängigkeit. Die native Datei wird für das Betriebssystem und die Prozessorarchitektur des Build-Rechners erstellt. `synadm` selbst muss weiterhin separat installiert und konfiguriert sein.
 
 ## Bedienung
 
@@ -151,6 +156,7 @@ In Ja/Nein-Dialogen wird die gewünschte Schaltfläche mit `←`/`→` gewählt 
 ```bash
 python3 -m unittest discover -v
 python3 -m compileall -q synadm_tui
+python3 scripts/build_executable.py
 ```
 
 Die Tests verwenden ausschließlich die Standardbibliothek und benötigen keinen erreichbaren Synapse-Server. Weitere Hinweise stehen in [CONTRIBUTING.md](CONTRIBUTING.md).
