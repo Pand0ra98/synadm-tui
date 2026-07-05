@@ -101,7 +101,7 @@ PyInstaller ist bewusst nur eine Build- und keine Laufzeitabhängigkeit. Die nat
 
 ## DEB- und RPM-Pakete ohne Runner
 
-Aus den beiden nativen Dateien lassen sich lokal installierbare Pakete erzeugen. Benötigt werden `dpkg-deb` für Debian-Pakete und `rpmbuild` aus dem Paket `rpm` beziehungsweise `rpm-build` für RPM-Pakete:
+Aus der nativen Datei lassen sich lokal installierbare Pakete erzeugen. Benötigt werden `dpkg-deb` für Debian-Pakete und `rpmbuild` aus dem Paket `rpm` beziehungsweise `rpm-build` für RPM-Pakete:
 
 ```bash
 python3 scripts/build_native.py
@@ -148,6 +148,8 @@ sudo apt update
 sudo apt install synadm-tui
 ```
 
+Dieser Ablauf wurde mit Version 0.15 in einer isolierten APT-Umgebung geprüft: Signaturprüfung, Paketauflösung, Download, Dateirechte und Programmstart waren erfolgreich.
+
 Fedora, RHEL und kompatible Systeme:
 
 ```bash
@@ -156,7 +158,13 @@ sudo curl -fsSL https://git.blackwall.ipv64.de/api/packages/pan/rpm.repo \
 sudo dnf install synadm-tui
 ```
 
+**Hinweis zum aktuellen RPM-Status:** Repository-Metadaten, SHA256-Prüfsummen, Paketinhalt und Programmstart von Version 0.15 wurden geprüft. Die von Gitea erzeugte Repository-Datei aktiviert jedoch `gpgcheck=1`, während die bisher veröffentlichten RPM-Dateien noch keine eingebettete Paketsignatur besitzen. Eine Installation über DNF sollte deshalb erst nach Einrichtung eines dauerhaften RPM-Signaturschlüssels freigegeben werden; `gpgcheck` sollte nicht als Behelf deaktiviert werden.
+
 Die separat gepflegte [Thüringen Edition](https://git.blackwall.ipv64.de/pan/synadm-tui-thueringen) verwendet denselben Anwendungskern, bringt ihr Branding und ihre Pakete aber in einem eigenen Repository mit.
+
+### Editionen gemeinsam aktualisieren
+
+Zuerst wird eine neue Version des neutralen Kernprojekts getestet, getaggt und veröffentlicht. Danach wird im Thüringen-Repository das Submodul `vendor/synadm-tui` auf genau diesen Tag gesetzt, die identische Versionsnummer eingetragen und der gemeinsame Kern zusammen mit den Brandingtests erneut geprüft. Anwendungscode wird nicht in das Thüringen-Repository kopiert.
 
 ## Bedienung
 
