@@ -33,7 +33,7 @@ def build(output: Path) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="synadm-tui als einzelne ausführbare Datei bauen")
-    parser.add_argument("--output", type=Path, default=ROOT / "dist" / "synadm-tui")
+    parser.add_argument("--output", type=Path, default=ROOT / "dist" / "synadm-tui.pyz")
     args = parser.parse_args()
     result = build(args.output)
     print(result)

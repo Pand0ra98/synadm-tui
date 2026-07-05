@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def main() -> int:
     PyInstaller.__main__.run([
         str(ROOT / "scripts" / "standalone_entry.py"),
-        "--name=synadm-tui-native",
+        "--name=synadm-tui",
         "--onefile",
         "--clean",
         f"--paths={ROOT}",

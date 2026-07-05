@@ -65,18 +65,18 @@ Ohne zusätzliche Build-Abhängigkeiten kann eine einzelne ausführbare Datei er
 
 ```bash
 python3 scripts/build_executable.py
-./dist/synadm-tui --version
-./dist/synadm-tui
+./dist/synadm-tui.pyz --version
+./dist/synadm-tui.pyz
 ```
 
-Die erzeugte Datei `dist/synadm-tui` enthält den gesamten Anwendungscode und kann direkt kopiert werden. Auf dem Zielsystem werden weiterhin Python 3.10+ sowie das separat installierte Programm `synadm` benötigt.
+Die erzeugte Datei `dist/synadm-tui.pyz` enthält den gesamten Anwendungscode und kann direkt kopiert werden. Auf dem Zielsystem werden weiterhin Python 3.10+ sowie das separat installierte Programm `synadm` benötigt.
 
 Für eine vollständig native Datei, die kein installiertes Python benötigt:
 
 ```bash
 python3 -m pip install pyinstaller
 python3 scripts/build_native.py
-./dist/synadm-tui-native --version
+./dist/synadm-tui --version
 ```
 
 PyInstaller ist bewusst nur eine Build- und keine Laufzeitabhängigkeit. Die native Datei wird für das Betriebssystem und die Prozessorarchitektur des Build-Rechners erstellt. `synadm` selbst muss weiterhin separat installiert und konfiguriert sein.
