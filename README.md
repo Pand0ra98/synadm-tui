@@ -158,7 +158,7 @@ sudo curl -fsSL https://git.blackwall.ipv64.de/api/packages/pan/rpm.repo \
 sudo dnf install synadm-tui
 ```
 
-**Hinweis zum aktuellen RPM-Status:** Repository-Metadaten, SHA256-Prüfsummen, Paketinhalt und Programmstart von Version 0.15 wurden geprüft. Die von Gitea erzeugte Repository-Datei aktiviert jedoch `gpgcheck=1`, während die bisher veröffentlichten RPM-Dateien noch keine eingebettete Paketsignatur besitzen. Eine Installation über DNF sollte deshalb erst nach Einrichtung eines dauerhaften RPM-Signaturschlüssels freigegeben werden; `gpgcheck` sollte nicht als Behelf deaktiviert werden.
+**Hinweis zum aktuellen RPM-Status:** Repository-Metadaten, SHA256-Prüfsummen, Paketinhalt und Programmstart von Version 0.15 wurden geprüft. Ein realer Test unter Fedora 42 mit DNF5 lädt Repository und Paket korrekt, beendet die Transaktion aber mit `The package is not signed`. Die von Gitea erzeugte Repository-Datei aktiviert `gpgcheck=1`, während die bisher veröffentlichten RPM-Dateien noch keine eingebettete Paketsignatur besitzen. Eine Installation über DNF sollte deshalb erst nach Einrichtung eines dauerhaften RPM-Signaturschlüssels freigegeben werden; `gpgcheck` sollte nicht als Behelf deaktiviert werden.
 
 Die separat gepflegte [Thüringen Edition](https://git.blackwall.ipv64.de/pan/synadm-tui-thueringen) verwendet denselben Anwendungskern, bringt ihr Branding und ihre Pakete aber in einem eigenen Repository mit.
 
