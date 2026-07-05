@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "synadm-tui"
+version = "0.1.0"
+description = "Terminal-Oberflaeche fuer die Matrix-Synapse-Administration mit synadm"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "synadm-tui contributors" }]
+classifiers = [
+  "Environment :: Console :: Curses",
+  "Programming Language :: Python :: 3",
+]
+
+[project.scripts]
+synadm-tui = "synadm_tui.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["synadm_tui*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

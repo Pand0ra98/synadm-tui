@@ -1,0 +1,3 @@
+username;password;display_name;email;admin;type
+@alice:example.org;Start-123;Alice;alice@example.org;nein;regular
+@service:example.org;Bot-456;Service Bot;;nein;bot
