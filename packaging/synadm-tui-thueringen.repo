@@ -1,0 +1,6 @@
+[gitea-pan-synadm-tui-thueringen]
+name=synadm TUI Thüringen
+baseurl=https://git.blackwall.ipv64.de/api/packages/pan/rpm/thueringen
+enabled=1
+gpgcheck=1
+gpgkey=https://git.blackwall.ipv64.de/api/packages/pan/generic/synadm-tui-repository/1/RPM-GPG-KEY-synadm-tui

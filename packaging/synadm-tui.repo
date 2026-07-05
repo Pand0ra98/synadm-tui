@@ -3,4 +3,4 @@ name=synadm TUI
 baseurl=https://git.blackwall.ipv64.de/api/packages/pan/rpm
 enabled=1
 gpgcheck=1
-gpgkey=https://git.blackwall.ipv64.de/pan/synadm-tui/raw/branch/main/packaging/RPM-GPG-KEY-synadm-tui
+gpgkey=https://git.blackwall.ipv64.de/api/packages/pan/generic/synadm-tui-repository/1/RPM-GPG-KEY-synadm-tui

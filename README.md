@@ -156,7 +156,7 @@ Dieser Ablauf wurde mit Version 0.15 in einer isolierten APT-Umgebung geprüft: 
 Fedora, RHEL und kompatible Systeme:
 
 ```bash
-sudo curl -fsSL https://git.blackwall.ipv64.de/pan/synadm-tui/raw/branch/main/packaging/synadm-tui.repo \
+sudo curl -fsSL https://git.blackwall.ipv64.de/api/packages/pan/generic/synadm-tui-repository/1/synadm-tui.repo \
   -o /etc/yum.repos.d/synadm-tui.repo
 sudo dnf install synadm-tui
 ```
