@@ -30,8 +30,10 @@ python3 -m synadm_tui
 - farbiger Unicode-Halbblock-Renderer für Alacritty, Zellij und andere 256-Farben-Terminals; Text-Fallback für stark eingeschränkte Terminals
 - kräftige Doppelrahmen, thematische Startgrafiken und zentrierte Paneltitel
 - nicht blockierende Ausführung; die Oberfläche bleibt während eines API-Aufrufs bedienbar
-- formatierte JSON-Ausgabe mit Scrollfunktion
-- zusätzliche Bestätigung vor als destruktiv markierten Befehlen
+- filter- und sortierbare Tabellenansicht für Benutzer, Räume, Geräte und Medien
+- zusätzliche Bestätigung sowie exakte Zieleingabe vor besonders destruktiven Befehlen
+- automatische Abschlusskontrolle nach unterstützten Schreiboperationen
+- lokales, bereinigtes Audit-Protokoll mit Dateirechten `0600`
 - sichere Prozessaufrufe als Argumentliste, ohne Shell-Auswertung
 - geführte Eingabeassistenten für Suche, IDs, Limits und Benutzeränderungen
 - Rückwärtsnavigation mit `Shift+Tab` in mehrstufigen Assistenten
@@ -40,6 +42,8 @@ python3 -m synadm_tui
 - geführte Installation beziehungsweise Aktualisierung von `synadm` über `pipx`
 - sicherer Erstkonfigurations-Assistent für Server, Admin-Zugriffstoken und API-Einstellungen
 - geführter CSV-Import mit Trennzeichenerkennung, Spaltenzuordnung und Vorschau
+- Moderationsassistenten für Kontosperren, Shadow-Bans, Geräte und Nachrichtenredaktion
+- Raumwerkzeuge für Beitritt, Administratorrechte, Blockierung, Löschstatus und leere Räume
 - nur Python-Standardbibliothek; keine Laufzeitabhängigkeiten
 
 ## Voraussetzungen
@@ -152,9 +156,9 @@ sudo apt install synadm-tui
 ```
 
 APT wählt automatisch die neueste verfügbare Version. Eine Versionsangabe wie
-`synadm-tui=0.16` ist für die normale Installation nicht erforderlich.
+`synadm-tui=0.17` ist für die normale Installation nicht erforderlich.
 
-Dieser Ablauf wurde mit Version 0.16 in einer isolierten APT-Umgebung geprüft: Signaturprüfung, Paketauflösung, Download, Dateirechte und Programmstart waren erfolgreich.
+Dieser Ablauf wurde mit Version 0.17 in einer isolierten APT-Umgebung geprüft: Signaturprüfung, Paketauflösung, Download, Dateirechte und Programmstart waren erfolgreich.
 
 Fedora, RHEL und kompatible Systeme:
 
@@ -183,19 +187,25 @@ Zuerst wird eine neue Version des neutralen Kernprojekts getestet, getaggt und v
 | `n` | Benutzer anlegen |
 | `i` | CSV-Import öffnen |
 | `/` | Benutzer suchen |
+| `x` | Benutzer als GDPR-gelöscht deaktivieren |
+| `a` | Assistent zum Anlegen eines Raums öffnen |
 | `c` | synadm-Konfigurationsassistent öffnen |
 | `f` | Befehle über alle Bereiche filtern |
 | `?` | Tastaturhilfe anzeigen |
 | `t` | Themenauswahl öffnen |
 | `Shift+Tab` | Im Assistenten einen Schritt zurückgehen |
 | `PgUp` / `PgDn`, `Home` | Ausgabe scrollen |
+| `v` | Aktuelle Ergebnistabelle filtern beziehungsweise Filter entfernen |
+| `s` | Sortierspalte wählen; erneute Auswahl kehrt die Richtung um |
+| `Tab` / `→` | Von der Befehlsliste in die Ergebnistabelle wechseln |
+| `Enter` auf Tabellenzeile | Kontextmenü für den ausgewählten Benutzer öffnen |
 | `r` | letzten Befehl wiederholen |
 | `q` | beenden |
 | `Esc` | Eingabe oder Bestätigung abbrechen |
 
 Geführte Assistenten fragen häufige Werte wie Suchtext, Limit und Matrix-ID einzeln ab. Mit `Shift+Tab` geht es zum vorherigen Schritt; `Backspace` tut dies ebenfalls, wenn das aktuelle Eingabefeld bereits leer ist. Erweiterte Argumente werden wie in der Shell geschrieben; Anführungszeichen werden unterstützt. Die Eingabe wird mit `shlex` zerlegt und **nicht** durch eine Shell ausgeführt. Die Reaktionszeit der einzelnen `Esc`-Taste wird auf 35 ms reduziert.
 
-`·` kennzeichnet lesende, `+` schreibende und `!` besonders gefährliche Aktionen. Der Detailbereich erklärt die Auswahl und zeigt ein Beispiel. Für gefährliche Aktionen verlangt die TUI eine zweite Bestätigung. Trotzdem empfiehlt sich vor großflächigen Verwaltungsaktionen ein aktuelles Synapse-Backup.
+`·` kennzeichnet lesende, `+` schreibende und `!` besonders gefährliche Aktionen. Der Detailbereich erklärt die Auswahl und zeigt ein Beispiel. Für gefährliche Aktionen verlangt die TUI eine zweite Bestätigung. Bei Benutzerlöschung, Gerätelöschung, Nachrichtenredaktion, Raumlöschung und History-Purge muss zusätzlich die betroffene Benutzer- oder Raum-ID exakt erneut eingegeben werden. Trotzdem empfiehlt sich vor großflächigen Verwaltungsaktionen ein aktuelles Synapse-Backup.
 
 Die Erstkonfiguration ist mit `c` sowie unter **Weitere → synadm-Erstkonfiguration** erreichbar. Der Assistent fragt Konfigurationspfad, Admin-Benutzer, Zugriffstoken, Verbindung, API-Pfade, Homeserver-Erkennung, Ausgabeformat, Timeout und TLS-Prüfung ab. Vorhandene Dateien werden vor dem Überschreiben als zeitgestempelte `.bak-*`-Datei gesichert. Das Ergebnis wird atomar mit Dateirechten `0600` gespeichert; ein anschließender Diagnoseaufruf zeigt Erfolg oder Fehlergrund im Detailbereich.
 
@@ -231,6 +241,108 @@ Im Dateibrowser öffnet `Enter` ein Verzeichnis beziehungsweise wählt eine CSV-
 
 In Ja/Nein-Dialogen wird die gewünschte Schaltfläche mit `←`/`→` gewählt und mit `Enter` bestätigt. Sicherheitsabfragen starten grundsätzlich auf **Nein**.
 
+## Benutzer löschen
+
+Unter **Benutzer → Benutzer löschen (GDPR)** oder mit `x` lässt sich ein Konto über
+den von Synapse unterstützten Löschweg entfernen. Der Assistent fragt zuerst die
+vollständige Matrix-ID ab und zeigt anschließend den konkreten Befehl in einer
+Sicherheitsabfrage an. **Nein** ist dabei vorausgewählt.
+
+Technisch führt die TUI folgenden `synadm`-Befehl im nicht-interaktiven Modus aus:
+
+```bash
+synadm user deactivate --gdpr-erase @alice:example.org
+```
+
+Synapse entfernt hierbei aktive Sitzungen, setzt das Passwort zurück, löscht
+Drittanbieter-IDs, entfernt das Konto aus beigetretenen Räumen und markiert es als
+GDPR-gelöscht. Der interne Datenbankeintrag wird von der Synapse-Admin-API nicht
+physisch entfernt. Die Aktion ist destruktiv und sollte nur mit Testkonten oder nach
+einer geeigneten Datensicherung ausprobiert werden.
+
+## Räume anlegen
+
+Unter **Räume → Raum anlegen** oder mit `a` öffnet sich ein Assistent für die
+Matrix-Client-API. Er fragt Raumname, optionalen Alias und Thema, Sichtbarkeit,
+Raumvorlage, einzuladende Matrix-IDs und die Föderationseinstellung ab. Dropdowns
+erklären dabei den Unterschied zwischen privaten, vertrauenswürdigen privaten und
+öffentlichen Räumen. Mit `Shift+Tab` kann zu jedem vorherigen Schritt zurückgekehrt
+werden.
+
+Vor dem Anlegen zeigt die TUI den vollständigen JSON-Inhalt und startet mit
+vorausgewähltem **Nein**. Technisch wird der folgende, von `synadm` unterstützte
+Matrix-Zugriff verwendet:
+
+```bash
+synadm matrix raw client/v3/createRoom --method post --data '{...}'
+```
+
+Der konfigurierte Admin-Benutzer wird zum Ersteller des Raums. Sein Zugriffstoken
+wird von `synadm` direkt aus der Konfigurationsdatei gelesen und weder in der
+Vorschau noch in den Prozessargumenten der TUI wiederholt.
+
+## Moderation und Raumwerkzeuge
+
+Der eigene Bereich **Moderation** bündelt reversible Kontosperren, Shadow-Bans,
+Gerätebereinigung und Nachrichtenredaktion. Für alte Geräte steht zuerst ein
+Dry-Run bereit. Er zeigt die betroffenen Geräte, ohne Sitzungen oder Zugriffstoken
+zu verändern. Erst die getrennte Löschaktion führt die Bereinigung aus.
+
+Unter **Räume** stehen zusätzlich Aliasauflösung, administrativer Raumbeitritt,
+Vergabe von Raumadministratorrechten, Power-Level, Blockierungsstatus,
+Entsperrung, Löschstatus und die Bereinigung leerer Räume zur Verfügung. Auch bei
+leeren Räumen existiert eine eigene Dry-Run-Aktion, bevor tatsächlich gelöscht
+wird.
+
+Nach Benutzeränderungen, Sperren, Gerätebereinigungen, Raumbeitritten,
+Administratoränderungen und Blockierungen führt die TUI automatisch einen
+passenden Leseaufruf aus. Aktion und Abschlusskontrolle erscheinen gemeinsam im
+Ergebnisbereich.
+
+## Tabellenansicht
+
+Strukturierte Listen von `synadm` werden als Tabelle angezeigt. `v` setzt einen
+Volltextfilter über alle sichtbaren Spalten; eine leere Eingabe entfernt ihn. Mit
+`s` wird die Sortierspalte gewählt. Wird dieselbe Spalte erneut gewählt, wechselt
+die Sortierrichtung. `PgUp`, `PgDn` und `Home` bewegen sich wie bei normaler
+Ausgabe durch größere Ergebnismengen.
+
+Enthält eine Tabellenzeile eine Matrix-Benutzer-ID, kann sie mit `Tab` oder `→`
+fokussiert und mit `↑`/`↓` ausgewählt werden. `Enter` öffnet anschließend ein
+Kontextmenü für genau diesen Benutzer. Mit der Maus markiert ein einfacher Klick
+die Zeile; ein Doppelklick öffnet das Menü direkt. Verfügbar sind unter anderem:
+
+- Details, Profiländerung und Passwort
+- Raum-Mitgliedschaften, Medien und aktive Sitzungen
+- Sperren und Entsperren
+- Geräteprüfung und Gerätebereinigung
+- Shadow-Ban setzen oder aufheben
+- Nachrichtenredaktion
+- GDPR-Löschung
+
+Die ausgewählte Matrix-ID wird in den jeweiligen Assistenten vorausgefüllt.
+Gefährliche Aktionen behalten trotzdem ihre Ja/Nein-Abfrage und die zusätzliche
+exakte Zieleingabe.
+
+Lange Befehlslisten und Dropdowns scrollen automatisch um die aktuelle Auswahl.
+Das Server-Panel wächst auf größeren Terminals und bricht Statusmeldungen sauber
+über mehrere eingerückte Zeilen um, damit die Oberfläche trotz der zusätzlichen
+Funktionen nicht gestaucht wirkt.
+
+## Audit-Protokoll
+
+Jeder abgeschlossene `synadm`-Befehl wird mit UTC-Zeit, bereinigter Argumentliste,
+Ergebniscode und Laufzeit protokolliert. Passwörter und Tokens werden durch
+`********` ersetzt. Die Datei besitzt ausschließlich Benutzerrechte (`0600`):
+
+```text
+~/.local/state/synadm-tui/audit.jsonl
+```
+
+Unter **Weitere → Audit-Protokoll anzeigen** kann die Chronik direkt als filter-
+und sortierbare Tabelle geöffnet werden. Mit `XDG_STATE_HOME` lässt sich der
+Speicherort entsprechend der XDG-Konvention ändern.
+
 Die Themenauswahl ist jederzeit mit `t` sowie unter **Weitere → Darstellung / Thema wählen** erreichbar. Mit `↑`/`↓` wird die Farbgebung live ausprobiert, `Enter` speichert sie editionsabhängig unter `~/.config/synadm-tui/`, und `Esc` stellt das vorherige Thema wieder her.
 
 Die Standard Edition enthält die generierten Embleme `retro-cyberspace.png` und `hacker-terminal.png`. Unterstützt das Terminal das Kitty-Grafikprotokoll – beispielsweise Kitty, WezTerm oder Ghostty –, erscheint das zum aktiven Thema passende transparente PNG direkt im Detailbereich. Unter Alacritty, innerhalb von Zellij und in anderen 256-Farben-Terminals zeichnet die TUI automatisch eine kompakte farbige Annäherung mit Unicode-Halbblöcken. Nur wenn auch das nicht möglich ist, wird die reine Textgrafik verwendet. Sixel wird dafür nicht benötigt.
@@ -241,6 +353,7 @@ Die Standard Edition enthält die generierten Embleme `retro-cyberspace.png` und
 - Der Erstkonfigurations-Assistent schreibt den eingegebenen Zugriffstoken ausschließlich in die gewählte `synadm`-Konfigurationsdatei. Er wird verdeckt eingegeben, nicht in der Vorschau angezeigt und nicht als Prozessargument übergeben.
 - Neu erzeugte Konfigurationsdateien werden atomar geschrieben und erhalten auf POSIX-Systemen die Dateirechte `0600`.
 - Passwörter werden in Eingabe, Vorschau und Ergebnis maskiert.
+- Audit-Einträge enthalten keine als Passwort oder Token gekennzeichneten Argumentwerte.
 - Beim nicht-interaktiven Benutzerimport muss `synadm` Passwörter kurzzeitig als Prozessargument erhalten. Auf Mehrbenutzersystemen können andere privilegierte Prozesse diese möglicherweise sehen.
 - Konfigurationsdateien, `.env`-Dateien und lokale YAML-Konfigurationen sind standardmäßig von Git ausgeschlossen.
 
@@ -252,6 +365,9 @@ Die Standard Edition enthält die generierten Embleme `retro-cyberspace.png` und
 | `runner.py` | sichere `synadm`-Prozessausführung |
 | `catalog.py` | Bereiche und verfügbare Aktionen |
 | `assistants.py` | strukturierte Eingabefelder pro Befehl |
+| `room_creation.py` | Validierung und JSON-Aufbau für die Matrix-Raumerstellung |
+| `table_view.py` | Extraktion, Filterung, Sortierung und Darstellung strukturierter Ergebnisse |
+| `audit.py` | lokales JSONL-Audit mit Geheimnisbereinigung und sicheren Dateirechten |
 | `command_help.py` | Beschreibungen, Beispiele und Schreibschutz-Kennzeichnung |
 | `configuration.py` | Validierung, Sicherung und atomare synadm-Konfiguration |
 | `edition.py` | neutrales Standardprofil und Erweiterungsschnittstelle für externe Editionen |

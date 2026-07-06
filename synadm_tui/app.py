@@ -20,6 +20,7 @@ from pathlib import Path
 from .catalog import SECTIONS, Command
 from .command_help import command_info
 from .assistants import fields_for
+from .audit import append_audit, audit_path
 from .block_art import load_block_cells
 from .configuration import OUTPUT_FORMATS, SynadmConfig, backup_synadm_config, write_synadm_config
 from .edition import Edition, STANDARD_EDITION
@@ -34,6 +35,7 @@ from .csv_import import (
 )
 from .file_browser import list_entries
 from .runner import Result, SynadmRunner, pretty_output
+from .room_creation import RoomCreation, RoomCreationError, parse_invitees
 from .terminal_image import (
     kitty_delete_sequence,
     kitty_render_sequence,
@@ -41,6 +43,7 @@ from .terminal_image import (
     theme_image_path,
     write_terminal_sequence,
 )
+from .table_view import TableView
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,6 +190,7 @@ class PanelLayout:
     body_y: int
     body_height: int
     left_width: int
+    server_height: int
     sections_y: int
     sections_height: int
     quick_y: int
@@ -214,6 +218,7 @@ class App:
         self.selection = Selection()
         self.focus = "sections"
         self.result: Result | None = None
+        self.table_view: TableView | None = None
         self.output = "Bereit. Wähle links einen Bereich und einen Befehl."
         self.status = "synadm gefunden" if runner.available else "synadm nicht gefunden – siehe README"
         self.running = False
@@ -306,6 +311,28 @@ class App:
         if key == curses.KEY_MOUSE:
             self._handle_mouse(screen)
             return
+        if not self.running and self.focus == "table" and self.table_view is not None:
+            if key in (curses.KEY_LEFT, ord("h"), 27, 9):
+                self.focus = "commands"
+                return
+            if key in (curses.KEY_UP, ord("k")):
+                self.table_view.move(-1)
+                return
+            if key in (curses.KEY_DOWN, ord("j")):
+                self.table_view.move(1)
+                return
+            if key == curses.KEY_PPAGE:
+                self.table_view.move(-10)
+                return
+            if key == curses.KEY_NPAGE:
+                self.table_view.move(10)
+                return
+            if key == curses.KEY_HOME:
+                self.table_view.selected = 0
+                return
+            if key in (10, 13, curses.KEY_ENTER, ord("m"), ord("M")):
+                self._open_user_context_menu(screen)
+                return
         if not self.running and key in (ord("?"),):
             self._clear_inline_image()
             self._show_keyboard_help(screen)
@@ -322,6 +349,33 @@ class App:
             self._clear_inline_image()
             self._choose_theme(screen)
             return
+        if not self.running and self.table_view is not None and key in (ord("v"), ord("V")):
+            value = self._prompt(
+                screen,
+                "Tabelle filtern",
+                "Suchtext; leer entfernt den Filter",
+                initial=self.table_view.filter_text,
+            )
+            if isinstance(value, str):
+                self.table_view.filter_text = value
+                self.table_view.selected = 0
+                self.selection.output_offset = 0
+                self.status = f"Tabellenfilter: {value or 'aus'}"
+            return
+        if not self.running and self.table_view is not None and key in (ord("s"), ord("S")):
+            options = tuple((column, column) for column in self.table_view.columns)
+            selected = self._select_dialog_option(
+                screen,
+                "Tabelle sortieren",
+                "Spalte auswählen; erneute Auswahl kehrt die Richtung um:",
+                options,
+                self.table_view.sort_key,
+            )
+            if isinstance(selected, str):
+                self.table_view.select_sort(selected)
+                self.selection.output_offset = 0
+                self.status = f"Sortiert nach {selected}"
+            return
         if not self.running and key in (ord("i"), ord("I")):
             self._select_command("Benutzer", "Benutzer aus CSV importieren")
             self._prepare_command(screen)
@@ -332,6 +386,14 @@ class App:
             return
         if not self.running and key == ord("/"):
             self._select_command("Benutzer", "Benutzer suchen")
+            self._prepare_command(screen)
+            return
+        if not self.running and key in (ord("x"), ord("X")):
+            self._select_command("Benutzer", "Benutzer löschen (GDPR)")
+            self._prepare_command(screen)
+            return
+        if not self.running and key in (ord("a"), ord("A")):
+            self._select_command("Räume", "Raum anlegen")
             self._prepare_command(screen)
             return
         if self.focus == "sections":
@@ -345,7 +407,10 @@ class App:
                 self.focus = "commands"
                 self.show_command_details = True
             return
-        if key in (curses.KEY_LEFT, ord("h"), 27):
+        if self.table_view is not None and key in (curses.KEY_RIGHT, 9):
+            self.focus = "table"
+            self.show_command_details = False
+        elif key in (curses.KEY_LEFT, ord("h"), 27):
             self.focus = "sections"
             self.show_command_details = False
         elif key in (curses.KEY_UP, ord("k")):
@@ -375,16 +440,22 @@ class App:
             return None
         body_y = 2
         body_height = height - 4
-        left_width = min(30, max(24, width // 5))
+        left_width = min(36, max(28, width // 4))
         command_width = min(42, max(30, width // 3))
-        server_height = 6
         sections_height = len(SECTIONS) + 3
+        # Grow the server panel on ordinary terminals while preserving at
+        # least one quick action at the documented minimum terminal size.
+        server_height = max(
+            6,
+            min(10, body_height // 3, body_height - sections_height - 3),
+        )
         quick_height = body_height - server_height - sections_height
         sections_y = body_y + server_height
         return PanelLayout(
             body_y=body_y,
             body_height=body_height,
             left_width=left_width,
+            server_height=server_height,
             sections_y=sections_y,
             sections_height=sections_height,
             quick_y=sections_y + sections_height,
@@ -418,12 +489,16 @@ class App:
             return
 
         command_index = mouse_y - (layout.body_y + 2)
-        visible_commands = SECTIONS[self.selection.section].commands[: layout.body_height - 4]
+        commands = SECTIONS[self.selection.section].commands
+        command_start, command_end = self._command_viewport(
+            len(commands), self.selection.command, layout.body_height - 4
+        )
+        visible_commands = commands[command_start:command_end]
         if (
             layout.command_x <= mouse_x < layout.command_x + layout.command_width
             and 0 <= command_index < len(visible_commands)
         ):
-            self.selection.command = command_index
+            self.selection.command = command_start + command_index
             self.selection.output_offset = 0
             self.focus = "commands"
             self.show_command_details = True
@@ -435,13 +510,38 @@ class App:
             ("Benutzer", "Benutzer ändern"),
             ("Benutzer", "Benutzer aus CSV importieren"),
             ("Benutzer", "Benutzer suchen"),
+            ("Benutzer", "Benutzer löschen (GDPR)"),
+            ("Räume", "Raum anlegen"),
         )
         if 0 <= mouse_x < layout.left_width and 0 <= quick_index < len(quick_actions):
             self._select_command(*quick_actions[quick_index])
             self.show_command_details = True
             self._prepare_command(screen)
+            return
 
-    def _prepare_command(self, screen: curses.window) -> None:
+        if self.table_view is not None:
+            output_x = layout.command_x + layout.command_width + 1
+            output_width = width - output_x
+            details_height = max(11, layout.body_height * 2 // 3)
+            if (
+                output_x <= mouse_x < output_x + output_width
+                and layout.body_y < mouse_y < layout.body_y + details_height - 1
+            ):
+                line_index = mouse_y - (layout.body_y + 2) + self.selection.output_offset
+                row_index = line_index - 3
+                rows = self.table_view.visible_rows()
+                if 0 <= row_index < len(rows):
+                    self.table_view.selected = row_index
+                    self.focus = "table"
+                    self.show_command_details = False
+                    if button_state & curses.BUTTON1_DOUBLE_CLICKED:
+                        self._open_user_context_menu(screen)
+
+    def _prepare_command(
+        self,
+        screen: curses.window,
+        defaults: dict[str, str] | None = None,
+    ) -> None:
         self._clear_inline_image()
         spec = self.current_command
         if spec.action == "csv_import":
@@ -462,7 +562,13 @@ class App:
         if spec.action == "configure_synadm":
             self._configure_synadm(screen)
             return
-        extra_args = self._command_assistant(screen, spec)
+        if spec.action == "create_room":
+            self._create_room_wizard(screen)
+            return
+        if spec.action == "show_audit":
+            self._show_audit()
+            return
+        extra_args = self._command_assistant(screen, spec, defaults)
         if extra_args is None:
             return
         args = [*spec.argv, *extra_args]
@@ -472,14 +578,24 @@ class App:
         if spec.dangerous and not self._confirm(screen, args):
             self.status = "Destruktive Aktion abgebrochen"
             return
+        target = self._typed_confirmation_target(args) if spec.dangerous else None
+        if target and not self._confirm_typed_target(screen, target):
+            self.status = "Zielbestätigung fehlgeschlagen – Aktion abgebrochen"
+            return
         self._launch(args)
 
-    def _command_assistant(self, screen: curses.window, spec: Command) -> list[str] | None:
+    def _command_assistant(
+        self,
+        screen: curses.window,
+        spec: Command,
+        defaults: dict[str, str] | None = None,
+    ) -> list[str] | None:
         fields = fields_for(spec.argv, spec.hint)
         if not fields:
             return []
         total = len(fields)
-        values = [""] * total
+        defaults = defaults or {}
+        values = [defaults.get(field.label, "") for field in fields]
         index = 0
         while index < total:
             field = fields[index]
@@ -520,10 +636,194 @@ class App:
             return None
         return collected
 
+    def _open_user_context_menu(self, screen: curses.window) -> None:
+        if self.table_view is None:
+            return
+        user_id = self.table_view.selected_user_id()
+        if user_id is None:
+            self.status = "Die ausgewählte Tabellenzeile enthält keine Matrix-Benutzer-ID"
+            return
+        actions = (
+            ("Benutzer", "Benutzerdetails"),
+            ("Benutzer", "Benutzer ändern"),
+            ("Benutzer", "Passwort setzen"),
+            ("Benutzer", "Raummitgliedschaften"),
+            ("Benutzer", "Benutzer-Medien"),
+            ("Benutzer", "Benutzer-Whois"),
+            ("Moderation", "Benutzer sperren"),
+            ("Moderation", "Benutzer entsperren"),
+            ("Moderation", "Alte Geräte prüfen"),
+            ("Moderation", "Alte Geräte löschen"),
+            ("Moderation", "Shadow-Ban setzen"),
+            ("Moderation", "Shadow-Ban aufheben"),
+            ("Moderation", "Nachrichten redigieren"),
+            ("Benutzer", "Benutzer löschen (GDPR)"),
+        )
+        options = tuple((title, title) for _section, title in actions)
+        selected = self._select_dialog_option(
+            screen,
+            f"Benutzeraktionen · {user_id}",
+            "Aktion für den ausgewählten Benutzer:",
+            options,
+            options[0][1],
+        )
+        if not isinstance(selected, str):
+            return
+        section, title = next((section, title) for section, title in actions if title == selected)
+        self._select_command(section, title)
+        self._prepare_command(screen, {"Benutzer-ID": user_id})
+
+    def _create_room_wizard(self, screen: curses.window) -> None:
+        values: dict[str, object] = {
+            "name": "",
+            "alias": "",
+            "topic": "",
+            "visibility": "private",
+            "preset": "private_chat",
+            "invitees": "",
+            "federated": True,
+        }
+        step = 0
+        while True:
+            result: object
+            if step == 0:
+                result = self._prompt(
+                    screen,
+                    "Raum anlegen · 1/7",
+                    "Raumname (Pflichtfeld)",
+                    initial=str(values["name"]),
+                )
+                if isinstance(result, str) and not result.strip():
+                    self.status = "Der Raumname ist erforderlich"
+                    continue
+                key = "name"
+            elif step == 1:
+                result = self._prompt(
+                    screen,
+                    "Raum anlegen · 2/7",
+                    "Alias lokal, optional – z. B. projekt (ohne # und Server)",
+                    initial=str(values["alias"]),
+                )
+                key = "alias"
+            elif step == 2:
+                result = self._prompt(
+                    screen,
+                    "Raum anlegen · 3/7",
+                    "Thema/Beschreibung, optional",
+                    initial=str(values["topic"]),
+                )
+                key = "topic"
+            elif step == 3:
+                result = self._select_dialog_option(
+                    screen,
+                    "Raum anlegen · 4/7",
+                    "Sichtbarkeit im Raumverzeichnis:",
+                    (("Privat – nicht im Verzeichnis", "private"), ("Öffentlich – im Verzeichnis", "public")),
+                    str(values["visibility"]),
+                )
+                key = "visibility"
+            elif step == 4:
+                result = self._select_dialog_option(
+                    screen,
+                    "Raum anlegen · 5/7",
+                    "Vorlage für Beitritt und Berechtigungen:",
+                    (
+                        ("Privater Raum – nur Einladung", "private_chat"),
+                        ("Vertrauensraum – Eingeladene sind Admins", "trusted_private_chat"),
+                        ("Öffentlicher Raum – freier Beitritt", "public_chat"),
+                    ),
+                    str(values["preset"]),
+                )
+                key = "preset"
+            elif step == 5:
+                result = self._prompt(
+                    screen,
+                    "Raum anlegen · 6/7",
+                    "Einladungen optional, Matrix-IDs mit Komma trennen",
+                    initial=str(values["invitees"]),
+                )
+                key = "invitees"
+            elif step == 6:
+                result = self._dialog_yes_no(
+                    screen,
+                    "Raum anlegen · 7/7",
+                    "Darf der Raum mit anderen Matrix-Homeservern föderieren?",
+                    default=bool(values["federated"]),
+                )
+                key = "federated"
+            else:
+                try:
+                    creation = RoomCreation(
+                        name=str(values["name"]),
+                        alias=str(values["alias"]),
+                        topic=str(values["topic"]),
+                        visibility=str(values["visibility"]),
+                        preset=str(values["preset"]),
+                        invitees=parse_invitees(str(values["invitees"])),
+                        federated=bool(values["federated"]),
+                    )
+                    creation.validate()
+                except RoomCreationError as error:
+                    self.status = str(error)
+                    step = 1 if "Alias" in str(error) else 5
+                    continue
+                confirmed = self._confirm_room_creation(screen, creation)
+                if confirmed is WIZARD_BACK:
+                    step = 6
+                    continue
+                if not confirmed:
+                    self.status = "Raumerstellung abgebrochen"
+                    return
+                self._launch(creation.command())
+                return
+
+            if result is WIZARD_BACK:
+                step = max(0, step - 1)
+                continue
+            if result is None:
+                self.status = "Raumerstellung abgebrochen"
+                return
+            values[key] = result
+            step += 1
+
+    def _confirm_room_creation(self, screen: curses.window, creation: RoomCreation) -> bool | object:
+        height, width = screen.getmaxyx()
+        box_width = min(width - 4, 88)
+        box_height = min(height - 4, 19)
+        window = curses.newwin(box_height, box_width, (height - box_height) // 2, (width - box_width) // 2)
+        window.keypad(True)
+        selected = False
+        preview = json.dumps(creation.payload(), ensure_ascii=False, indent=2).splitlines()
+        while True:
+            window.erase()
+            self._draw_dialog_frame(window)
+            self._draw_dialog_heading(window, "Raum prüfen und anlegen", curses.A_BOLD | self._color(5))
+            self._safe_add(window, 2, 3, "POST /_matrix/client/v3/createRoom", curses.A_BOLD | self._color(1))
+            available = max(1, box_height - 7)
+            for index, line in enumerate(preview[:available]):
+                self._safe_add(window, 3 + index, 3, line[: box_width - 6])
+            if len(preview) > available:
+                self._safe_add(window, box_height - 4, 3, f"… {len(preview) - available} weitere JSON-Zeilen", curses.A_DIM)
+            self._safe_add(window, box_height - 3, 3, "←/→ auswählen · Enter anlegen · Shift+Tab zurück", curses.A_DIM)
+            self._draw_yes_no_buttons(window, box_height - 2, box_width, selected)
+            window.refresh()
+            key = window.getch()
+            if key in (10, 13, curses.KEY_ENTER):
+                return selected
+            if key == curses.KEY_BTAB:
+                return WIZARD_BACK
+            if key in (curses.KEY_LEFT, curses.KEY_RIGHT, 9, ord("h"), ord("l")):
+                selected = not selected
+            elif key in (ord("j"), ord("J"), ord("y"), ord("Y")):
+                return True
+            elif key in (ord("n"), ord("N"), 27):
+                return False
+
     def _launch(self, args: list[str]) -> None:
         if self.running:
             return
         self.running = True
+        self.table_view = None
         visible_command = redact_args(self.runner.build_command(args))
         self.output = "$ " + " ".join(shlex.quote(part) for part in visible_command) + "\n\nWird ausgeführt …"
         self.status = "Befehl läuft …"
@@ -532,9 +832,116 @@ class App:
         self.show_command_details = False
 
         def work() -> None:
-            self.events.put(self.runner.run(args, structured="--help" not in args and "-h" not in args))
+            structured = "--help" not in args and "-h" not in args
+            result = self.runner.run(args, structured=structured)
+            verification = self._verification_args(args)
+            if result.ok and verification is not None:
+                checked = self.runner.run(verification)
+                result = self._combined_verification_result(result, checked)
+            self.events.put(result)
 
         threading.Thread(target=work, name="synadm-runner", daemon=True).start()
+
+    def _show_audit(self) -> None:
+        path = audit_path()
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except FileNotFoundError:
+            self.status = "Noch kein Audit-Protokoll vorhanden"
+            self.output = f"Audit-Datei wird nach der ersten abgeschlossenen Aktion angelegt:\n{path}"
+            self.table_view = None
+            return
+        except OSError as error:
+            self.status = "Audit-Protokoll konnte nicht gelesen werden"
+            self.output = str(error)
+            self.table_view = None
+            return
+        recent = lines[-200:]
+        records: list[dict[str, object]] = []
+        for line in recent:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict):
+                records.append(record)
+        self.output = "\n".join(recent) or "(Audit-Protokoll ist leer)"
+        self.table_view = TableView(records) if records else None
+        self.selection.output_offset = 0
+        self.show_command_details = False
+        self.status = f"Audit-Protokoll · {len(recent)} Einträge · {path}"
+
+    @staticmethod
+    def _typed_confirmation_target(args: list[str]) -> str | None:
+        if len(args) < 2:
+            return None
+        especially_dangerous = {
+            ("user", "deactivate"),
+            ("user", "prune-devices"),
+            ("user", "redact"),
+            ("room", "delete"),
+            ("history", "purge"),
+            ("media", "delete"),
+        }
+        if tuple(args[:2]) not in especially_dangerous or "--list-only" in args:
+            return None
+        if args[0] == "media" and "--media-id" in args:
+            position = args.index("--media-id") + 1
+            return args[position] if position < len(args) else None
+        prefixes = ("@",) if args[0] == "user" else ("!", "#")
+        return next((part for part in args[2:] if part.startswith(prefixes)), None)
+
+    def _confirm_typed_target(self, screen: curses.window, target: str) -> bool:
+        entered = self._prompt(
+            screen,
+            "Ziel zur Sicherheit bestätigen",
+            f"Bitte exakt {target} eingeben",
+        )
+        return isinstance(entered, str) and entered == target
+
+    @staticmethod
+    def _verification_args(args: list[str]) -> list[str] | None:
+        if len(args) < 2:
+            return None
+        operation = tuple(args[:2])
+        user_target = next((part for part in args[2:] if part.startswith("@")), None)
+        room_target = next((part for part in args[2:] if part.startswith(("!", "#"))), None)
+        if operation == ("user", "prune-devices") and user_target:
+            return ["user", "whois", user_target]
+        if operation in {
+            ("user", "modify"), ("user", "password"), ("user", "deactivate"),
+            ("user", "suspend"), ("user", "shadow-ban"),
+        } and user_target:
+            return ["user", "details", user_target]
+        if operation == ("room", "join") and room_target:
+            return ["room", "members", room_target]
+        if operation == ("room", "make-admin") and room_target:
+            return ["room", "state", room_target]
+        if operation == ("room", "block") and room_target:
+            return ["room", "block-status", room_target]
+        return None
+
+    @staticmethod
+    def _combined_verification_result(action: Result, verification: Result) -> Result:
+        def decoded(value: str) -> object:
+            try:
+                return json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                return value.strip() or None
+
+        payload = {
+            "action": decoded(action.stdout),
+            "verification": decoded(verification.stdout),
+            "verification_ok": verification.ok,
+            "verification_error": verification.stderr.strip() or None,
+        }
+        return Result(
+            action.command,
+            action.returncode,
+            json.dumps(payload, ensure_ascii=False),
+            action.stderr,
+            action.duration + verification.duration,
+        )
 
     def _install_synadm(self, screen: curses.window) -> None:
         pipx = shutil.which("pipx")
@@ -1068,12 +1475,20 @@ class App:
             return
         self.result = result
         self.running = False
+        audit_error: OSError | None = None
+        try:
+            append_audit(result.command, result.returncode, result.duration)
+        except OSError as error:
+            audit_error = error
         body = result.stdout if result.stdout.strip() else result.stderr
+        self.table_view = TableView.from_json(body) if result.ok else None
         self.output = pretty_output(body)
         if result.stdout.strip() and result.stderr.strip():
             self.output += "\n\nHinweise:\n" + result.stderr.strip()
         state = "Erfolgreich" if result.ok else f"Fehler (Exit {result.returncode})"
         self.status = f"{state} · {result.duration:.2f} s"
+        if audit_error is not None:
+            self.status += " · Audit-Protokoll nicht schreibbar"
         label = self.pending_activity or " ".join(result.command[-3:])
         self.activities.insert(0, Activity(datetime.now().strftime("%H:%M:%S"), label, result.ok))
         del self.activities[8:]
@@ -1158,7 +1573,13 @@ class App:
         output_x = layout.command_x + layout.command_width + 1
         output_width = width - output_x
 
-        self._draw_server_panel(screen, layout.body_y, 0, layout.left_width, 6)
+        self._draw_server_panel(
+            screen,
+            layout.body_y,
+            0,
+            layout.left_width,
+            layout.server_height,
+        )
         self._draw_sections(
             screen, layout.sections_y, 0, layout.left_width, layout.sections_height
         )
@@ -1181,7 +1602,8 @@ class App:
         )
 
         self._safe_add(screen, height - 2, 0, "═" * (width - 1), curses.A_BOLD | self._color(1))
-        footer = f"{self.edition.name} · {self.theme.name}  │  Maus/↑/↓ wählen  Enter öffnen  ? Hilfe  q Ende"
+        table_hint = "  Tab Tabelle  Enter Aktionen  v Filter  s Sortierung" if self.table_view is not None else ""
+        footer = f"{self.edition.name} · {self.theme.name}  │  Maus/↑/↓ wählen  Enter öffnen{table_hint}  ? Hilfe  q Ende"
         self._safe_add(screen, height - 1, 2, footer[: width - 4], curses.A_DIM)
         screen.refresh()
         self._sync_inline_image()
@@ -1200,22 +1622,39 @@ class App:
 
     def _draw_commands(self, screen: curses.window, y: int, x: int, width: int, height: int) -> None:
         self._draw_box(screen, y, x, height, width, SECTIONS[self.selection.section].title, self.focus == "commands")
-        for index, command in enumerate(SECTIONS[self.selection.section].commands[: height - 4]):
+        commands = SECTIONS[self.selection.section].commands
+        start, end = self._command_viewport(len(commands), self.selection.command, height - 4)
+        for row, command in enumerate(commands[start:end]):
+            index = start + row
             selected = index == self.selection.command
             active = selected and self.focus == "commands"
             attr = self._color(2) | curses.A_BOLD if active else (self._color(5) if command.dangerous else 0)
             info = command_info(command)
             marker = "! " if command.dangerous else ("+ " if info.writes else "· ")
-            self._safe_add(screen, y + 2 + index, x + 2, (marker + command.title)[: width - 4], attr)
+            self._safe_add(screen, y + 2 + row, x + 2, (marker + command.title)[: width - 4], attr)
         spec = self.current_command
         if spec.hint:
-            self._safe_add(screen, y + height - 2, x + 2, ("Eingabe: " + spec.hint)[: width - 4], curses.A_DIM)
+            self._safe_add(screen, y + height - 2, x + 2, ("Eingabe: " + spec.hint)[: width - 8], curses.A_DIM)
+        if start:
+            self._safe_add(screen, y + 1, x + width - 5, "↑", curses.A_BOLD | self._color(1))
+        if end < len(commands):
+            self._safe_add(screen, y + height - 2, x + width - 5, "↓", curses.A_BOLD | self._color(1))
+
+    @staticmethod
+    def _command_viewport(total: int, selected: int, capacity: int) -> tuple[int, int]:
+        """Return a stable scrolling window around the selected command."""
+        capacity = max(1, capacity)
+        if total <= capacity:
+            return 0, total
+        start = selected - capacity // 2
+        start = max(0, min(start, total - capacity))
+        return start, start + capacity
 
     def _draw_output(self, screen: curses.window, y: int, x: int, width: int, height: int) -> None:
         title = "Details / Ausgabe"
         if self.result:
             title += "  ✓" if self.result.ok else "  ✗"
-        self._draw_box(screen, y, x, height, width, title, False)
+        self._draw_box(screen, y, x, height, width, title, self.focus == "table")
         if self.show_command_details:
             self._draw_command_details(screen, y, x, width, height)
             return
@@ -1249,8 +1688,17 @@ class App:
             self._safe_add(screen, label_y, x + max(2, (width - len(label)) // 2), label[: width - 4], curses.A_BOLD | self._color(1))
             return
         lines: list[str] = []
-        for raw_line in self.output.expandtabs(4).splitlines() or [""]:
-            lines.extend(textwrap.wrap(raw_line, max(1, width - 4), replace_whitespace=False, drop_whitespace=False) or [""])
+        if self.table_view is not None:
+            lines = self.table_view.render(max(8, width - 4))
+            selected_line = 3 + self.table_view.selected
+            visible_height = max(1, height - 3)
+            if selected_line < self.selection.output_offset:
+                self.selection.output_offset = selected_line
+            elif selected_line >= self.selection.output_offset + visible_height:
+                self.selection.output_offset = selected_line - visible_height + 1
+        else:
+            for raw_line in self.output.expandtabs(4).splitlines() or [""]:
+                lines.extend(textwrap.wrap(raw_line, max(1, width - 4), replace_whitespace=False, drop_whitespace=False) or [""])
         max_offset = max(0, len(lines) - (height - 3))
         self.selection.output_offset = min(self.selection.output_offset, max_offset)
         visible = lines[self.selection.output_offset : self.selection.output_offset + height - 3]
@@ -1353,14 +1801,39 @@ class App:
         self._draw_box(screen, y, x, height, width, "Server", False)
         state_color = self._color(3) if self.server_state == "Verbunden" else self._color(5)
         self._safe_add(screen, y + 1, x + 2, f"● {self.server_state}"[: width - 4], curses.A_BOLD | state_color)
-        self._safe_add(screen, y + 2, x + 2, f"Synapse {self.server_version}"[: width - 4])
-        self._safe_add(screen, y + 3, x + 2, self.status[: width - 4], self._status_color())
+        available_rows = max(0, height - 3)
+        lines: list[tuple[str, int]] = []
+        lines.extend((line, curses.A_NORMAL) for line in self._wrap_panel_value("Synapse", self.server_version, width - 4))
+        lines.extend((line, self._status_color()) for line in self._wrap_panel_value("Status", self.status, width - 4))
+        for index, (line, attr) in enumerate(lines[:available_rows]):
+            self._safe_add(screen, y + 2 + index, x + 2, line, attr)
+
+    @staticmethod
+    def _wrap_panel_value(label: str, value: str, width: int) -> list[str]:
+        """Wrap a labelled panel value and align continuation lines."""
+        if width < 1:
+            return []
+        prefix = f"{label}: "
+        return textwrap.wrap(
+            prefix + (value.strip() or "—"),
+            width=width,
+            subsequent_indent=" " * min(len(prefix), max(0, width - 1)),
+            break_long_words=True,
+            break_on_hyphens=True,
+            replace_whitespace=True,
+        ) or [prefix[:width]]
 
     def _draw_quick_actions(self, screen: curses.window, y: int, x: int, width: int, height: int) -> None:
         if height < 3:
             return
         self._draw_box(screen, y, x, height, width, "Schnellaktionen", False)
-        actions = (("n", "Benutzer anlegen"), ("i", "CSV importieren"), ("/", "Benutzer suchen"))
+        actions = (
+            ("n", "Benutzer anlegen"),
+            ("i", "CSV importieren"),
+            ("/", "Benutzer suchen"),
+            ("x", "Benutzer löschen"),
+            ("a", "Raum anlegen"),
+        )
         for index, (key, label) in enumerate(actions[: max(0, height - 2)]):
             self._safe_add(screen, y + 1 + index, x + 2, key, curses.A_BOLD | self._color(1))
             self._safe_add(screen, y + 1 + index, x + 5, label[: width - 7])
@@ -1488,7 +1961,7 @@ class App:
     def _show_keyboard_help(self, screen: curses.window) -> None:
         height, width = screen.getmaxyx()
         box_width = min(width - 4, 78)
-        box_height = 17
+        box_height = 18
         window = curses.newwin(box_height, box_width, (height - box_height) // 2, (width - box_width) // 2)
         window.keypad(True)
         entries = (
@@ -1499,7 +1972,10 @@ class App:
             ("f", "Befehle über alle Bereiche filtern"),
             ("c", "synadm-Konfigurationsassistent"),
             ("t", "Thema auswählen"),
-            ("n · i · /", "Benutzer neu · CSV-Import · Benutzersuche"),
+            ("n · i · / · x", "Benutzer neu · CSV · Suche · Löschen"),
+            ("a", "Raum anlegen"),
+            ("v · s", "Tabelle filtern · sortieren"),
+            ("Tab/→ · Enter", "Tabelle fokussieren · Benutzeraktionen"),
             ("PgUp/PgDn", "Ausgabe scrollen"),
             ("q", "Programm beenden"),
         )
@@ -1578,10 +2054,13 @@ class App:
         options: tuple[tuple[str, str], ...],
         current: str,
     ) -> str | None | object:
+        if not options:
+            return None
         selected = next((index for index, (_label, value) in enumerate(options) if value == current), 0)
         height, width = screen.getmaxyx()
         box_width = min(width - 4, 64)
-        box_height = max(9, len(options) + 7)
+        box_height = min(height - 4, max(9, min(18, len(options) + 7)))
+        visible_count = max(1, box_height - 7)
         window = curses.newwin(box_height, box_width, (height - box_height) // 2, (width - box_width) // 2)
         window.keypad(True)
         while True:
@@ -1589,11 +2068,17 @@ class App:
             self._draw_dialog_frame(window)
             self._draw_dialog_heading(window, title, curses.A_BOLD | self._color(1))
             self._safe_add(window, 2, 3, prompt[: box_width - 6], curses.A_DIM)
-            for index, (label, _value) in enumerate(options):
+            start = max(0, min(selected - visible_count // 2, len(options) - visible_count))
+            for row, (label, _value) in enumerate(options[start : start + visible_count]):
+                index = start + row
                 active = index == selected
                 marker = "▶" if active else " "
                 attr = curses.A_BOLD | self._color(2) if active else curses.A_NORMAL
-                self._safe_add(window, 4 + index, 4, f"{marker} {label}"[: box_width - 8], attr)
+                self._safe_add(window, 4 + row, 4, f"{marker} {label}"[: box_width - 8], attr)
+            if start:
+                self._safe_add(window, 3, box_width - 5, "↑", curses.A_BOLD | self._color(1))
+            if start + visible_count < len(options):
+                self._safe_add(window, box_height - 3, box_width - 5, "↓", curses.A_BOLD | self._color(1))
             self._safe_add(window, box_height - 2, 3, "↑/↓ auswählen · Enter übernehmen · Esc abbrechen", curses.A_DIM)
             window.refresh()
             key = window.getch()

@@ -170,7 +170,7 @@ install -Dpm 0644 %{{SOURCE2}} %{{buildroot}}%{{_licensedir}}/{edition.package}/
 %license %{{_licensedir}}/{edition.package}/LICENSE
 
 %changelog
-* Sun Jul 05 2026 synadm-tui contributors - {version}-1
+* Mon Jul 06 2026 synadm-tui contributors - {version}-1
 - Automated local package build
 """
 

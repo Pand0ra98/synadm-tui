@@ -1,7 +1,7 @@
 import unittest
 
 from synadm_tui.catalog import SECTIONS
-from synadm_tui.command_help import command_info
+from synadm_tui.command_help import DESCRIPTIONS, command_info
 
 
 class CommandHelpTests(unittest.TestCase):
@@ -12,6 +12,7 @@ class CommandHelpTests(unittest.TestCase):
                 self.assertTrue(info.description, command.title)
                 self.assertTrue(info.example, command.title)
                 self.assertIsInstance(info.writes, bool)
+                self.assertIn(command.title, DESCRIPTIONS)
 
 
 if __name__ == "__main__":
