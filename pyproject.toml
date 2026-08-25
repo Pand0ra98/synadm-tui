@@ -17,12 +17,14 @@ classifiers = [
 
 [project.scripts]
 synadm-tui = "synadm_tui.cli:main"
+synadm-tui-thueringen = "synadm_tui_thueringen.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["synadm_tui*"]
 
 [tool.setuptools.package-data]
 synadm_tui = ["assets/*.png", "assets/*.block.json"]
+synadm_tui_thueringen = ["assets/*.png", "assets/*.block.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

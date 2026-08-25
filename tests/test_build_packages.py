@@ -57,6 +57,12 @@ class PackageBuildTests(unittest.TestCase):
         self.assertIn("Requires:       python3-pip", spec)
         self.assertIn("Requires:       pipx", spec)
 
+    def test_builds_standard_and_thueringen_editions(self) -> None:
+        packages = {edition.package for edition in build_packages.EDITIONS}
+        executables = {edition.executable for edition in build_packages.EDITIONS}
+        self.assertEqual(packages, {"synadm-tui", "synadm-tui-thueringen"})
+        self.assertEqual(executables, {"synadm-tui", "synadm-tui-thueringen"})
+
     def test_official_rpm_signing_key_is_declared(self) -> None:
         key = (ROOT / "packaging" / "RPM-SIGNING-KEY-ID").read_text(encoding="utf-8").strip()
         self.assertEqual(key, "A58923624002F769A7683FD6C18758AECA92C968")

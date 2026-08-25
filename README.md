@@ -25,6 +25,7 @@ python3 -m synadm_tui
 
 - übersichtliche Drei-Spalten-Navigation mit Tastatur- und Maussteuerung
 - neutrale **Standard Edition** ohne regionale Branding-Ressourcen
+- **Thüringen Edition** mit eigenem Branding und identischem Anwendungskern
 - umschaltbare Themen **Retro Cyberspace 198X**, **Matrix**, **Hacker Terminal**, **Hoher Kontrast** und **Monochrom**
 - transparente PNG-Embleme für Retro Cyberspace und Hacker Terminal in Kitty-, WezTerm- und Ghostty-kompatiblen Terminals
 - farbiger Unicode-Halbblock-Renderer für Alacritty, Zellij und andere 256-Farben-Terminals; Text-Fallback für stark eingeschränkte Terminals
@@ -102,7 +103,12 @@ cd dist
 sha256sum --check SHA256SUMS
 ```
 
-Der Build erzeugt die neutrale Standard Edition und die Prüfsummendatei `SHA256SUMS`.
+Der Build erzeugt beide Editionen und die gemeinsame Prüfsummendatei `SHA256SUMS`:
+
+```text
+dist/synadm-tui
+dist/synadm-tui-thueringen
+```
 
 PyInstaller ist bewusst nur eine Build- und keine Laufzeitabhängigkeit. Die nativen Dateien werden für das Betriebssystem und die Prozessorarchitektur des Build-Rechners erstellt. `synadm` selbst bleibt ein separates Programm, kann aber aus der TUI heraus installiert werden.
 
@@ -117,7 +123,16 @@ cd dist/packages
 sha256sum --check SHA256SUMS
 ```
 
-Das Ergebnis enthält jeweils ein DEB- und RPM-Paket. Die Build-Architektur wird automatisch auf `amd64`/`x86_64` beziehungsweise `arm64`/`aarch64` abgebildet. Das Skript verweigert die Paketierung, wenn die Versionsnummer der nativen Datei nicht zu `pyproject.toml` passt.
+Das Ergebnis enthält für beide Editionen jeweils ein DEB- und RPM-Paket:
+
+```text
+dist/packages/synadm-tui_<VERSION>_<ARCH>.deb
+dist/packages/synadm-tui-<VERSION>-1.<ARCH>.rpm
+dist/packages/synadm-tui-thueringen_<VERSION>_<ARCH>.deb
+dist/packages/synadm-tui-thueringen-<VERSION>-1.<ARCH>.rpm
+```
+
+Die Build-Architektur wird automatisch auf `amd64`/`x86_64` beziehungsweise `arm64`/`aarch64` abgebildet. Das Skript verweigert die Paketierung, wenn die Versionsnummer einer nativen Datei nicht zu `pyproject.toml` passt.
 
 Offizielle RPM-Builds werden automatisch mit dem Schlüssel
 `A589 2362 4002 F769 A768 3FD6 C187 58AE CA92 C968` signiert, wenn dessen privater Teil unter `~/.local/share/synadm-tui/rpm-signing/` vorhanden ist. Im Repository liegt ausschließlich der öffentliche Schlüssel. Fremde lokale Builds bleiben ohne privaten Schlüssel unsigniert.
@@ -143,6 +158,8 @@ python3 scripts/publish_packages.py --tea-login Building
 ```
 
 Standardmäßig werden die Pakete unter dem Eigentümer `pan`, DEB-Distribution `stable`, Komponente `main` und der gruppenlosen RPM-Registry veröffentlicht. Server, Eigentümer und Repository-Gruppen lassen sich über die Kommandozeilenoptionen anpassen. Dafür ist kein Actions-Runner erforderlich.
+
+Für GitHub wird ein gemeinsames Repository empfohlen. Pro Version gibt es einen Tag und einen Release; darin liegen Standard Edition und Thüringen Edition als getrennte Assets. So bleiben beide Varianten sichtbar getrennt, werden aber gemeinsam entwickelt, getestet und versioniert.
 
 ### Paketquelle verwenden
 
@@ -173,11 +190,9 @@ sudo dnf install synadm-tui
 
 Ab Version 0.16 besitzen die RPM-Pakete eine eingebettete RSA/SHA512-Signatur. Die projektspezifische `.repo`-Datei lässt `gpgcheck=1` aktiviert und verweist auf den zugehörigen öffentlichen Schlüssel. Signatur und Installation werden vor einem Release in Fedora mit DNF5 geprüft.
 
-Die separat gepflegte [Thüringen Edition](https://git.blackwall.ipv64.de/pan/synadm-tui-thueringen) verwendet denselben Anwendungskern, bringt ihr Branding und ihre Pakete aber in einem eigenen Repository mit.
-
 ### Editionen gemeinsam aktualisieren
 
-Zuerst wird eine neue Version des neutralen Kernprojekts getestet, getaggt und veröffentlicht. Danach wird im Thüringen-Repository das Submodul `vendor/synadm-tui` auf genau diesen Tag gesetzt, die identische Versionsnummer eingetragen und der gemeinsame Kern zusammen mit den Brandingtests erneut geprüft. Anwendungscode wird nicht in das Thüringen-Repository kopiert.
+Standard Edition und Thüringen Edition werden im selben Repository gepflegt. Der neutrale Anwendungskern liegt unter `synadm_tui/`, das Thüringen-Branding als dünnes Overlay unter `synadm_tui_thueringen/`. Vor einem Release werden immer beide Entry-Points, beide nativen Binaries und beide Paketsätze aus demselben Commit gebaut.
 
 ## Bedienung
 
@@ -373,11 +388,12 @@ Die Standard Edition enthält die generierten Embleme `retro-cyberspace.png` und
 | `audit.py` | lokales JSONL-Audit mit Geheimnisbereinigung und sicheren Dateirechten |
 | `command_help.py` | Beschreibungen, Beispiele und Schreibschutz-Kennzeichnung |
 | `configuration.py` | Validierung, Sicherung und atomare synadm-Konfiguration |
-| `edition.py` | neutrales Standardprofil und Erweiterungsschnittstelle für externe Editionen |
+| `edition.py` | neutrales Standardprofil und Erweiterungsschnittstelle für Editionen |
 | `terminal_image.py` | optionale transparente PNG-Darstellung über das Kitty-Grafikprotokoll |
 | `block_art.py` | protokollfreie 256-Farben-Darstellung für Alacritty und Multiplexer |
 | `csv_import.py` | CSV-Erkennung, Validierung und Importplanung |
 | `file_browser.py` | Dateibrowser für CSV-Dateien |
+| `synadm_tui_thueringen/` | Thüringen-Edition als Branding-Overlay mit eigenem Entry-Point |
 
 ## Entwicklung
 

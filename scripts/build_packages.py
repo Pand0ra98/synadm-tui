@@ -38,6 +38,12 @@ EDITIONS = (
         "Terminal-Oberfläche für die Matrix-Synapse-Administration",
         "Eine tastaturorientierte, von LazyDocker inspirierte Oberfläche für synadm.",
     ),
+    Edition(
+        "synadm-tui-thueringen",
+        "synadm-tui-thueringen",
+        "Thüringen-Edition der synadm Terminal-Oberfläche",
+        "Regionales Branding auf dem unveränderten Anwendungskern von synadm-tui.",
+    ),
 )
 
 
