@@ -176,9 +176,9 @@ sudo apt install synadm-tui
 ```
 
 APT wählt automatisch die neueste verfügbare Version. Eine Versionsangabe wie
-`synadm-tui=0.19` ist für die normale Installation nicht erforderlich.
+`synadm-tui=0.20` ist für die normale Installation nicht erforderlich.
 
-Dieser Ablauf wurde mit Version 0.19 in einer isolierten APT-Umgebung geprüft: Signaturprüfung, Paketauflösung, Download, Dateirechte und Programmstart waren erfolgreich.
+Dieser Ablauf wurde mit Version 0.20 in einer isolierten APT-Umgebung geprüft: Signaturprüfung, Paketauflösung, Download, Dateirechte und Programmstart waren erfolgreich.
 
 Fedora, RHEL und kompatible Systeme:
 
@@ -232,6 +232,18 @@ Alternativ bleibt die interaktive Einrichtung von `synadm` auf der Kommandozeile
 ```bash
 synadm config
 synadm matrix login @admin:example.org
+```
+
+## Einzelnen Benutzer anlegen
+
+Unter **Benutzer → Benutzer anlegen** oder mit der Kurztaste `n` startet ein Assistent für die Einzelanlage. Er fragt nacheinander Matrix-ID, Startpasswort, Anzeigename, E-Mail-Adresse, Adminstatus, Benutzertyp, Sperrstatus, Avatar-URL und optionale Zusatzargumente ab. Mit `Shift+Tab` kann jeder Schritt wieder zurückgenommen werden.
+
+Technisch verwendet die TUI dafür den von `synadm` vorgesehenen Befehl `synadm user modify`, weil `synadm` damit lokale Benutzer erstellt oder vorhandene Benutzer ändert. Vor dem Ausführen zeigt synadm-tui den fertigen Befehl noch einmal an; Passwörter werden dabei ausgeblendet.
+
+Beispiel:
+
+```bash
+synadm user modify @alice:example.org --password 'Start-123' --display-name 'Alice Beispiel' --threepid email alice@example.org
 ```
 
 ## Benutzer aus CSV importieren

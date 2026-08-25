@@ -381,7 +381,7 @@ class App:
             self._prepare_command(screen)
             return
         if not self.running and key in (ord("n"), ord("N")):
-            self._select_command("Benutzer", "Benutzer ändern")
+            self._select_command("Benutzer", "Benutzer anlegen")
             self._prepare_command(screen)
             return
         if not self.running and key == ord("/"):
@@ -507,7 +507,7 @@ class App:
 
         quick_index = mouse_y - (layout.quick_y + 1)
         quick_actions = (
-            ("Benutzer", "Benutzer ändern"),
+            ("Benutzer", "Benutzer anlegen"),
             ("Benutzer", "Benutzer aus CSV importieren"),
             ("Benutzer", "Benutzer suchen"),
             ("Benutzer", "Benutzer löschen (GDPR)"),
@@ -546,6 +546,9 @@ class App:
         spec = self.current_command
         if spec.action == "csv_import":
             self._csv_import_wizard(screen)
+            return
+        if spec.action == "create_user":
+            self._create_user_wizard(screen)
             return
         if spec.action == "install_synadm":
             self._install_synadm(screen)
@@ -635,6 +638,190 @@ class App:
             self.status = "Zum Anlegen oder Ändern muss mindestens ein Wert angegeben werden."
             return None
         return collected
+
+    @staticmethod
+    def _build_create_user_args(values: dict[str, object]) -> list[str]:
+        user_id = str(values.get("user_id", "")).strip()
+        if not user_id:
+            raise ValueError("Die Matrix-ID ist erforderlich")
+
+        args = ["user", "modify", user_id]
+        password = str(values.get("password", "")).strip()
+        display_name = str(values.get("display_name", "")).strip()
+        email = str(values.get("email", "")).strip()
+        avatar_url = str(values.get("avatar_url", "")).strip()
+        raw_options = str(values.get("raw_options", "")).strip()
+
+        if password:
+            args.extend(["--password", password])
+        if display_name:
+            args.extend(["--display-name", display_name])
+        if email:
+            args.extend(["--threepid", "email", email])
+
+        admin = str(values.get("admin", "default"))
+        if admin == "admin":
+            args.append("--admin")
+        elif admin == "no_admin":
+            args.append("--no-admin")
+        elif admin != "default":
+            raise ValueError(f"Unbekannte Admin-Auswahl: {admin}")
+
+        user_type = str(values.get("user_type", "regular"))
+        if user_type in ("bot", "support"):
+            args.extend(["--user-type", user_type])
+        elif user_type not in ("regular", "default", ""):
+            raise ValueError(f"Unbekannter Benutzertyp: {user_type}")
+
+        if avatar_url:
+            args.extend(["--avatar-url", avatar_url])
+
+        locked = str(values.get("locked", "default"))
+        if locked == "lock":
+            args.append("--lock")
+        elif locked == "unlock":
+            args.append("--unlock")
+        elif locked != "default":
+            raise ValueError(f"Unbekannte Sperrauswahl: {locked}")
+
+        if raw_options:
+            try:
+                args.extend(shlex.split(raw_options))
+            except ValueError as error:
+                raise ValueError(f"Ungültige Zusatzoptionen: {error}") from error
+
+        if len(args) == 3:
+            raise ValueError("Bitte mindestens Passwort, Anzeigename, E-Mail oder eine Option setzen")
+        return args
+
+    def _create_user_wizard(self, screen: curses.window) -> None:
+        values: dict[str, object] = {
+            "user_id": "",
+            "password": "",
+            "display_name": "",
+            "email": "",
+            "admin": "default",
+            "user_type": "regular",
+            "avatar_url": "",
+            "locked": "default",
+            "raw_options": "",
+        }
+        step = 0
+        total = 9
+        while True:
+            result: object
+            if step == 0:
+                result = self._prompt(
+                    screen,
+                    f"Benutzer anlegen · {step + 1}/{total}",
+                    "Matrix-ID (Pflichtfeld), z. B. @alice:example.org",
+                    initial=str(values["user_id"]),
+                )
+                if isinstance(result, str) and not result.strip():
+                    self.status = "Die Matrix-ID ist erforderlich"
+                    continue
+                key = "user_id"
+            elif step == 1:
+                result = self._prompt(
+                    screen,
+                    f"Benutzer anlegen · {step + 1}/{total}",
+                    "Startpasswort, optional aber für normale Konten empfohlen",
+                    initial=str(values["password"]),
+                    secret=True,
+                )
+                key = "password"
+            elif step == 2:
+                result = self._prompt(
+                    screen,
+                    f"Benutzer anlegen · {step + 1}/{total}",
+                    "Anzeigename, optional – z. B. Alice Beispiel",
+                    initial=str(values["display_name"]),
+                )
+                key = "display_name"
+            elif step == 3:
+                result = self._prompt(
+                    screen,
+                    f"Benutzer anlegen · {step + 1}/{total}",
+                    "E-Mail-Adresse als ThreePID, optional",
+                    initial=str(values["email"]),
+                )
+                key = "email"
+            elif step == 4:
+                result = self._select_dialog_option(
+                    screen,
+                    f"Benutzer anlegen · {step + 1}/{total}",
+                    "Administrative Rechte:",
+                    (
+                        ("Standard: normaler Benutzer", "default"),
+                        ("Admin-Rechte setzen", "admin"),
+                        ("Explizit kein Admin", "no_admin"),
+                    ),
+                    str(values["admin"]),
+                )
+                key = "admin"
+            elif step == 5:
+                result = self._select_dialog_option(
+                    screen,
+                    f"Benutzer anlegen · {step + 1}/{total}",
+                    "Benutzertyp:",
+                    (
+                        ("Regular / normaler Benutzer", "regular"),
+                        ("Bot", "bot"),
+                        ("Support", "support"),
+                    ),
+                    str(values["user_type"]),
+                )
+                key = "user_type"
+            elif step == 6:
+                result = self._select_dialog_option(
+                    screen,
+                    f"Benutzer anlegen · {step + 1}/{total}",
+                    "Sperrstatus beim Anlegen:",
+                    (
+                        ("Standard: nicht ändern", "default"),
+                        ("Konto sperren", "lock"),
+                        ("Konto entsperren", "unlock"),
+                    ),
+                    str(values["locked"]),
+                )
+                key = "locked"
+            elif step == 7:
+                result = self._prompt(
+                    screen,
+                    f"Benutzer anlegen · {step + 1}/{total}",
+                    "Avatar-URL, optional – z. B. mxc://example.org/avatar",
+                    initial=str(values["avatar_url"]),
+                )
+                key = "avatar_url"
+            elif step == 8:
+                result = self._prompt(
+                    screen,
+                    f"Benutzer anlegen · {step + 1}/{total}",
+                    "Erweiterte synadm-Optionen, optional – z. B. --deactivate",
+                    initial=str(values["raw_options"]),
+                )
+                key = "raw_options"
+            else:
+                try:
+                    args = self._build_create_user_args(values)
+                except ValueError as error:
+                    self.status = str(error)
+                    step = 0 if "Matrix-ID" in str(error) else total - 1
+                    continue
+                if not self._confirm(screen, args):
+                    self.status = "Benutzeranlage abgebrochen"
+                    return
+                self._launch(args)
+                return
+
+            if result is WIZARD_BACK:
+                step = max(0, step - 1)
+                continue
+            if result is None:
+                self.status = "Benutzeranlage abgebrochen"
+                return
+            values[key] = result
+            step += 1
 
     def _open_user_context_menu(self, screen: curses.window) -> None:
         if self.table_view is None:

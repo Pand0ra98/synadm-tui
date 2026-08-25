@@ -19,6 +19,10 @@ DESCRIPTIONS = {
     "synadm-Hilfe": "Zeigt die globale Hilfe und alle von synadm angebotenen Befehlsgruppen.",
     "Konfigurationshilfe": "Zeigt die offiziellen Optionen der synadm-Konfiguration.",
     "Benutzer auflisten": "Listet lokale Benutzer auf; Name und Anzahl können eingegrenzt werden.",
+    "Benutzer anlegen": (
+        "Legt ein lokales Matrix-Benutzerkonto mit Passwort, Anzeigename, E-Mail "
+        "und optionalen Eigenschaften kontrolliert an."
+    ),
     "Benutzer aus CSV importieren": "Legt mehrere Benutzer anhand einer CSV-Datei kontrolliert an oder ändert sie.",
     "Benutzer suchen": "Sucht Benutzer nach Matrix-ID, lokalem Namen oder Anzeigenamen.",
     "Benutzerdetails": "Zeigt Kontodaten und Status eines einzelnen Benutzers.",
@@ -85,6 +89,7 @@ DESCRIPTIONS = {
 }
 
 EXAMPLES = {
+    "Benutzer anlegen": "Assistent → Matrix-ID, Passwort, Anzeigename, E-Mail und Rollenoptionen prüfen",
     "Benutzer aus CSV importieren": "CSV-Datei wählen → Spalten zuordnen → Vorschau bestätigen",
     "Benutzer suchen": "synadm user search alice --limit 20",
     "Benutzerdetails": "synadm user details @alice:example.org",
@@ -119,7 +124,7 @@ EXAMPLES = {
 }
 
 WRITE_TITLES = {
-    "Benutzer aus CSV importieren", "Benutzer ändern", "Passwort setzen", "Medium schützen",
+    "Benutzer anlegen", "Benutzer aus CSV importieren", "Benutzer ändern", "Passwort setzen", "Medium schützen",
     "Benutzer deaktivieren", "Benutzer löschen (GDPR)", "Raum anlegen", "Raum blockieren", "Raum löschen",
     "Medien quarantänisieren", "Quarantäne aufheben", "Medien löschen",
     "Remote-Medien bereinigen", "Token erstellen", "Token ändern",

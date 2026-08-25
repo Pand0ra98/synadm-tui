@@ -97,11 +97,84 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(self.app._command_viewport(18, 17, 8), (10, 18))
 
     @patch("synadm_tui.app.App._prepare_command")
+    def test_new_user_shortcut_selects_create_user_assistant(self, prepare) -> None:
+        screen = Mock()
+        self.app._handle_key(screen, ord("n"))
+        self.assertEqual(self.app.current_command.title, "Benutzer anlegen")
+        prepare.assert_called_once_with(screen)
+
+    @patch("synadm_tui.app.App._prepare_command")
     def test_delete_shortcut_selects_gdpr_user_deletion(self, prepare) -> None:
         screen = Mock()
         self.app._handle_key(screen, ord("x"))
         self.assertEqual(self.app.current_command.title, "Benutzer löschen (GDPR)")
         prepare.assert_called_once_with(screen)
+
+    def test_create_user_builder_maps_assistant_values_to_synadm_modify(self) -> None:
+        args = self.app._build_create_user_args({
+            "user_id": "@alice:example.org",
+            "password": "Start-123",
+            "display_name": "Alice Beispiel",
+            "email": "alice@example.org",
+            "admin": "admin",
+            "user_type": "bot",
+            "locked": "lock",
+            "raw_options": "--avatar-url mxc://example.org/avatar",
+        })
+        self.assertEqual(args, [
+            "user", "modify", "@alice:example.org",
+            "--password", "Start-123",
+            "--display-name", "Alice Beispiel",
+            "--threepid", "email", "alice@example.org",
+            "--admin",
+            "--user-type", "bot",
+            "--lock",
+            "--avatar-url", "mxc://example.org/avatar",
+        ])
+
+    def test_create_user_builder_requires_matrix_id_and_at_least_one_value(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Matrix-ID"):
+            self.app._build_create_user_args({"password": "Start-123"})
+        with self.assertRaisesRegex(ValueError, "mindestens"):
+            self.app._build_create_user_args({"user_id": "@alice:example.org"})
+
+    @patch("synadm_tui.app.App._launch")
+    @patch("synadm_tui.app.App._confirm", return_value=True)
+    def test_create_user_wizard_launches_confirmed_command(self, confirm, launch) -> None:
+        with (
+            patch.object(
+                self.app,
+                "_prompt",
+                side_effect=[
+                    "@alice:example.org",
+                    "Start-123",
+                    "Alice Beispiel",
+                    "alice@example.org",
+                    "mxc://example.org/avatar",
+                    "",
+                ],
+            ),
+            patch.object(
+                self.app,
+                "_select_dialog_option",
+                side_effect=["admin", "support", "unlock"],
+            ),
+        ):
+            self.app._select_command("Benutzer", "Benutzer anlegen")
+            self.app._prepare_command(Mock())
+
+        expected = [
+            "user", "modify", "@alice:example.org",
+            "--password", "Start-123",
+            "--display-name", "Alice Beispiel",
+            "--threepid", "email", "alice@example.org",
+            "--admin",
+            "--user-type", "support",
+            "--avatar-url", "mxc://example.org/avatar",
+            "--unlock",
+        ]
+        confirm.assert_called_once_with(ANY, expected)
+        launch.assert_called_once_with(expected)
 
     @patch("synadm_tui.app.App._launch")
     @patch("synadm_tui.app.App._confirm", return_value=True)

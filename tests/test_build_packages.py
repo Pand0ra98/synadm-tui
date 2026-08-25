@@ -18,7 +18,7 @@ SPEC.loader.exec_module(build_packages)
 
 class PackageBuildTests(unittest.TestCase):
     def test_project_version_matches_current_release(self) -> None:
-        self.assertEqual(build_packages.project_version(), "0.19")
+        self.assertEqual(build_packages.project_version(), "0.20")
 
     def test_supported_architecture_mapping(self) -> None:
         with mock.patch.object(build_packages.platform, "machine", return_value="x86_64"):
@@ -31,12 +31,12 @@ class PackageBuildTests(unittest.TestCase):
             (root / edition.executable).write_bytes(b"test executable")
             stage = root / "stage"
             with mock.patch.object(build_packages, "DIST", root):
-                build_packages.write_debian_control(stage, edition, "0.19", "amd64")
+                build_packages.write_debian_control(stage, edition, "0.20", "amd64")
             control = (stage / "DEBIAN" / "control").read_text(encoding="utf-8")
 
         self.assertIn("Package: synadm-tui\n", control)
-        self.assertIn("Version: 0.19\n", control)
-        self.assertNotIn("Package: synadm-tui=0.19", control)
+        self.assertIn("Version: 0.20\n", control)
+        self.assertNotIn("Package: synadm-tui=0.20", control)
         self.assertIn("ca-certificates", control)
         self.assertIn("openssl", control)
         self.assertIn("python3", control)
@@ -46,7 +46,7 @@ class PackageBuildTests(unittest.TestCase):
 
     def test_rpm_spec_contains_expected_binary(self) -> None:
         edition = build_packages.EDITIONS[0]
-        spec = build_packages.rpm_spec(edition, "0.19", "x86_64")
+        spec = build_packages.rpm_spec(edition, "0.20", "x86_64")
         self.assertIn("Name:           synadm-tui", spec)
         self.assertIn("%{_bindir}/synadm-tui", spec)
         self.assertIn("Requires:       glibc >= 2.34", spec)

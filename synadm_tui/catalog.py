@@ -33,6 +33,7 @@ SECTIONS = (
         "Benutzer",
         (
             Command("Benutzer auflisten", ("user", "list"), "z. B. --limit 100"),
+            Command("Benutzer anlegen", (), "Geführte Einzelanlage", True, "create_user"),
             Command("Benutzer aus CSV importieren", (), "Geführter CSV-Import", True, "csv_import"),
             Command("Benutzer suchen", ("user", "search"), "SUCHTEXT"),
             Command("Benutzerdetails", ("user", "details"), "@name:server.tld"),

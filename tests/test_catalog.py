@@ -15,6 +15,9 @@ class CatalogTests(unittest.TestCase):
         user_delete = next(command for command in commands if command.title == "Benutzer löschen (GDPR)")
         self.assertEqual(user_delete.argv, ("user", "deactivate", "--gdpr-erase"))
         self.assertTrue(user_delete.dangerous)
+        user_create = next(command for command in commands if command.title == "Benutzer anlegen")
+        self.assertEqual(user_create.action, "create_user")
+        self.assertTrue(user_create.dangerous)
         room_create = next(command for command in commands if command.title == "Raum anlegen")
         self.assertEqual(room_create.action, "create_room")
         self.assertTrue(room_create.dangerous)
@@ -24,6 +27,7 @@ class CatalogTests(unittest.TestCase):
         package_actions = {command.action for command in commands}
         self.assertIn("choose_theme", package_actions)
         self.assertIn("configure_synadm", package_actions)
+        self.assertIn("create_user", package_actions)
         self.assertIn("uninstall_synadm", package_actions)
         self.assertIn("uninstall_pipx", package_actions)
         self.assertIn("create_room", package_actions)
