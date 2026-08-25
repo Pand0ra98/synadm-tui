@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "synadm-tui"
-version = "0.18"
+version = "0.19"
 description = "Terminal-Oberflaeche fuer die Matrix-Synapse-Administration mit synadm"
 readme = "README.md"
 requires-python = ">=3.10"
