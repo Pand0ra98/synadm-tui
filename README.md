@@ -44,16 +44,19 @@ python3 -m synadm_tui
 - geführter CSV-Import mit Trennzeichenerkennung, Spaltenzuordnung und Vorschau
 - Moderationsassistenten für Kontosperren, Shadow-Bans, Geräte und Nachrichtenredaktion
 - Raumwerkzeuge für Beitritt, Administratorrechte, Blockierung, Löschstatus und leere Räume
-- nur Python-Standardbibliothek; keine Laufzeitabhängigkeiten
+- TUI selbst nur mit Python-Standardbibliothek; die Systempakete bringen zusätzlich die Basis für `synadm`/`pipx` und TLS mit
 
 ## Voraussetzungen
 
 - Python 3.10 oder neuer auf Linux/macOS
+- OpenSSL, Zertifikatsbundle, `pipx` und Python-Paketwerkzeuge, sofern `synadm` über die TUI installiert oder aktualisiert werden soll
 - UTF-8-Terminal; für eingeschränkte Darstellung stehen Kontrast- und Monochromthemen bereit
 - `synadm`, wahlweise bereits installiert oder über die TUI nachinstalliert
 - ein Admin-Zugriffstoken in der `synadm`-Konfiguration
 
 `synadm` selbst lässt sich üblicherweise mit `pipx install synadm` installieren. Vor dem ersten TUI-Start sollte `synadm version` im selben Benutzerkonto funktionieren.
+
+Die offiziellen DEB- und RPM-Pakete hängen ab Version 0.18 bewusst zusätzlich von den üblichen TLS- und Python-Basispaketen ab. Dadurch werden auf normalen Zielsystemen `ca-certificates`, OpenSSL, Python, pip und `pipx` automatisch mitinstalliert. Das verhindert typische Fehler wie „SSL-Modul nicht vorhanden“, wenn anschließend `synadm` über `pipx` installiert oder HTTPS-Zugriffe durchgeführt werden. Eine manuell selbstgebaute Python-Version ohne SSL-Unterstützung kann dadurch allerdings nicht repariert werden; in diesem Fall muss die Python-Installation selbst korrigiert werden.
 
 `synadm` kann direkt unter **Weitere → synadm installieren/aktualisieren** nachinstalliert oder aktualisiert werden. Fehlt `pipx`, fragt die TUI, ob es zunächst benutzerlokal über Python/pip installiert werden soll. Jeder Befehl wird vorher angezeigt und verlangt eine ausdrückliche Bestätigung.
 
@@ -156,9 +159,9 @@ sudo apt install synadm-tui
 ```
 
 APT wählt automatisch die neueste verfügbare Version. Eine Versionsangabe wie
-`synadm-tui=0.17` ist für die normale Installation nicht erforderlich.
+`synadm-tui=0.18` ist für die normale Installation nicht erforderlich.
 
-Dieser Ablauf wurde mit Version 0.17 in einer isolierten APT-Umgebung geprüft: Signaturprüfung, Paketauflösung, Download, Dateirechte und Programmstart waren erfolgreich.
+Dieser Ablauf wurde mit Version 0.18 in einer isolierten APT-Umgebung geprüft: Signaturprüfung, Paketauflösung, Download, Dateirechte und Programmstart waren erfolgreich.
 
 Fedora, RHEL und kompatible Systeme:
 

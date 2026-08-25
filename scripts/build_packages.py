@@ -90,7 +90,7 @@ def write_debian_control(stage: Path, edition: Edition, version: str, arch: str)
         f"Architecture: {arch}\n"
         f"Maintainer: synadm-tui contributors\n"
         f"Installed-Size: {size_kib}\n"
-        f"Depends: libc6 (>= 2.34), zlib1g\n"
+        "Depends: libc6 (>= 2.34), zlib1g, ca-certificates, openssl, python3, python3-venv, python3-pip, pipx\n"
         f"Homepage: {HOMEPAGE}\n"
         f"Description: {edition.summary}\n"
         f" {edition.description}\n"
@@ -151,6 +151,11 @@ Source2:        LICENSE
 BuildArch:      {rpm_arch}
 Requires:       glibc >= 2.34
 Requires:       zlib
+Requires:       ca-certificates
+Requires:       openssl-libs
+Requires:       python3
+Requires:       python3-pip
+Requires:       pipx
 
 %description
 {edition.description}
