@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-
 VISIBILITIES = {"private", "public"}
 PRESETS = {"private_chat", "trusted_private_chat", "public_chat"}
 

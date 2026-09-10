@@ -3,7 +3,7 @@ import json
 import unittest
 from unittest.mock import ANY, Mock, patch
 
-from synadm_tui.app import App, WIZARD_BACK
+from synadm_tui.app import WIZARD_BACK, App
 from synadm_tui.catalog import SECTIONS
 from synadm_tui.runner import Result, SynadmRunner
 from synadm_tui.table_view import TableView

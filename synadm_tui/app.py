@@ -10,20 +10,25 @@ import queue
 import shlex
 import shutil
 import subprocess
-import threading
 import textwrap
+import threading
 import time
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Final
 
-from .catalog import SECTIONS, Command
-from .command_help import command_info
 from .assistants import fields_for
 from .audit import append_audit, audit_path
 from .block_art import load_block_cells
-from .configuration import OUTPUT_FORMATS, SynadmConfig, backup_synadm_config, write_synadm_config
-from .edition import Edition, STANDARD_EDITION
+from .catalog import SECTIONS, Command
+from .command_help import command_info
+from .configuration import (
+    OUTPUT_FORMATS,
+    SynadmConfig,
+    backup_synadm_config,
+    write_synadm_config,
+)
 from .csv_import import (
     FIELDS,
     CsvData,
@@ -31,11 +36,14 @@ from .csv_import import (
     ImportEntry,
     build_entries,
     inspect_csv,
+    normalize_homeserver,
     redact_args,
 )
+from .edition import STANDARD_EDITION, Edition
 from .file_browser import list_entries
-from .runner import Result, SynadmRunner, pretty_output
 from .room_creation import RoomCreation, RoomCreationError, parse_invitees
+from .runner import Result, SynadmRunner, pretty_output
+from .table_view import TableView
 from .terminal_image import (
     kitty_delete_sequence,
     kitty_render_sequence,
@@ -43,7 +51,6 @@ from .terminal_image import (
     theme_image_path,
     write_terminal_sequence,
 )
-from .table_view import TableView
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,7 +175,15 @@ THEMES = (
     ),
 )
 THEMES_BY_KEY = {theme.key: theme for theme in THEMES}
-WIZARD_BACK = object()
+
+
+class WizardBack:
+    """Sentinel used by dialogs to request navigation to the previous wizard step."""
+
+    __slots__ = ()
+
+
+WIZARD_BACK: Final = WizardBack()
 
 
 @dataclass(slots=True)
@@ -609,7 +624,7 @@ class App:
                 initial=values[index],
                 secret=field.secret,
             )
-            if value is WIZARD_BACK:
+            if isinstance(value, WizardBack):
                 index = max(0, index - 1)
                 continue
             if value is None:
@@ -814,7 +829,7 @@ class App:
                 self._launch(args)
                 return
 
-            if result is WIZARD_BACK:
+            if isinstance(result, WizardBack):
                 step = max(0, step - 1)
                 continue
             if result is None:
@@ -955,7 +970,7 @@ class App:
                     step = 1 if "Alias" in str(error) else 5
                     continue
                 confirmed = self._confirm_room_creation(screen, creation)
-                if confirmed is WIZARD_BACK:
+                if isinstance(confirmed, WizardBack):
                     step = 6
                     continue
                 if not confirmed:
@@ -964,7 +979,7 @@ class App:
                 self._launch(creation.command())
                 return
 
-            if result is WIZARD_BACK:
+            if isinstance(result, WizardBack):
                 step = max(0, step - 1)
                 continue
             if result is None:
@@ -973,7 +988,7 @@ class App:
             values[key] = result
             step += 1
 
-    def _confirm_room_creation(self, screen: curses.window, creation: RoomCreation) -> bool | object:
+    def _confirm_room_creation(self, screen: curses.window, creation: RoomCreation) -> bool | WizardBack:
         height, width = screen.getmaxyx()
         box_width = min(width - 4, 88)
         box_height = min(height - 4, 19)
@@ -1216,8 +1231,7 @@ class App:
                     process = subprocess.run(
                         command,
                         stdin=subprocess.DEVNULL,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
+                        capture_output=True,
                         text=True,
                         timeout=300,
                         check=False,
@@ -1350,7 +1364,7 @@ class App:
                 result = self._prompt(
                     screen, title, hint, initial=str(values[key]), secret=key == "token",
                 )
-            if result is WIZARD_BACK:
+            if isinstance(result, WizardBack):
                 index = max(0, index - 1)
                 continue
             if result is None:
@@ -1389,7 +1403,7 @@ class App:
             self.output = str(error)
             return
         confirmation = self._confirm_synadm_config(screen, path, config)
-        while confirmation is WIZARD_BACK:
+        while isinstance(confirmation, WizardBack):
             if config.protocol == "http":
                 previous = self._dialog_yes_no(
                     screen, "synadm-Einrichtung · 12/12",
@@ -1398,7 +1412,7 @@ class App:
                 if previous is None:
                     self.status = "Erstkonfiguration abgebrochen"
                     return
-                if previous is WIZARD_BACK:
+                if isinstance(previous, WizardBack):
                     continue
                 config = replace(config, ssl_verify=bool(previous))
             else:
@@ -1409,7 +1423,7 @@ class App:
                 if previous_timeout is None:
                     self.status = "Erstkonfiguration abgebrochen"
                     return
-                if previous_timeout is WIZARD_BACK:
+                if isinstance(previous_timeout, WizardBack):
                     continue
                 try:
                     parsed_timeout = int(previous_timeout)
@@ -1426,7 +1440,7 @@ class App:
         backup: Path | None = None
         if path.exists():
             overwrite = self._dialog_yes_no(screen, "Vorhandene Konfiguration", f"{path} sichern und überschreiben?", default=False)
-            if not overwrite or overwrite is WIZARD_BACK:
+            if not overwrite or isinstance(overwrite, WizardBack):
                 self.status = "Vorhandene Konfiguration wurde nicht verändert"
                 return
             try:
@@ -1456,6 +1470,8 @@ class App:
         has_header = True
         data: CsvData | None = None
         mapping: dict[str, int | None] | None = None
+        user_id_mode = "preserve"
+        homeserver = ""
         while True:
             if step == 0:
                 path = self._choose_csv_file(screen)
@@ -1471,7 +1487,7 @@ class App:
                 step = 1
             elif step == 1:
                 chosen = self._choose_delimiter(screen, delimiter)
-                if chosen is WIZARD_BACK:
+                if isinstance(chosen, WizardBack):
                     step = 0
                     continue
                 if chosen is None:
@@ -1482,12 +1498,13 @@ class App:
                     screen, "CSV-Import · Kopfzeile",
                     "Enthält die erste Zeile Spaltennamen?", default=has_header,
                 )
-                if header_answer is WIZARD_BACK:
+                if isinstance(header_answer, WizardBack):
                     continue
                 if header_answer is None:
                     self.status = "CSV-Import abgebrochen"
                     return
                 has_header = header_answer
+                assert path is not None
                 try:
                     data = inspect_csv(path, delimiter, has_header=has_header)
                 except CsvImportError as error:
@@ -1496,7 +1513,7 @@ class App:
                 step = 2
             elif step == 2 and data is not None:
                 mapped = self._map_csv_columns(screen, data, initial=mapping)
-                if mapped is WIZARD_BACK:
+                if isinstance(mapped, WizardBack):
                     step = 1
                     continue
                 if mapped is None:
@@ -1505,14 +1522,28 @@ class App:
                 mapping = mapped
                 step = 3
             elif step == 3 and data is not None and mapping is not None:
+                user_id_settings = self._choose_csv_user_id_handling(
+                    screen,
+                    user_id_mode=user_id_mode,
+                    homeserver=homeserver,
+                )
+                if isinstance(user_id_settings, WizardBack):
+                    step = 2
+                    continue
+                if user_id_settings is None:
+                    self.status = "CSV-Import abgebrochen"
+                    return
+                user_id_mode, homeserver = user_id_settings
+                step = 4
+            elif step == 4 and data is not None and mapping is not None:
                 try:
-                    entries = build_entries(data, mapping)
+                    entries = build_entries(data, mapping, user_id_mode=user_id_mode, homeserver=homeserver)
                 except CsvImportError as error:
                     self._show_error(str(error))
                     return
                 confirmed = self._confirm_csv_import(screen, data, entries, mapping)
-                if confirmed is WIZARD_BACK:
-                    step = 2
+                if isinstance(confirmed, WizardBack):
+                    step = 3
                     continue
                 if not confirmed:
                     self.status = "CSV-Import abgebrochen"
@@ -1577,8 +1608,7 @@ class App:
             height, width = screen.getmaxyx()
             visible_height = max(1, height - 9)
             selected = min(selected, max(0, len(entries) - 1))
-            if selected < offset:
-                offset = selected
+            offset = min(offset, selected)
             if selected >= offset + visible_height:
                 offset = selected - visible_height + 1
 
@@ -1588,7 +1618,9 @@ class App:
             self._safe_add(screen, 3, 2, "Verzeichnis:", curses.A_BOLD | self._color(1))
             self._safe_add(screen, 3, 15, str(directory)[: max(1, width - 17)])
             try:
-                screen.hline(4, 1, curses.ACS_HLINE, width - 2, curses.A_DIM)
+                screen.attron(curses.A_DIM)
+                screen.hline(4, 1, curses.ACS_HLINE, width - 2)
+                screen.attroff(curses.A_DIM)
             except curses.error:
                 pass
             if not entries:
@@ -1636,7 +1668,7 @@ class App:
                     "Absoluter oder relativer Pfad",
                     initial=str(directory) + os.sep,
                 )
-                if manual is WIZARD_BACK:
+                if isinstance(manual, WizardBack):
                     continue
                 if manual:
                     candidate = Path(manual).expanduser()
@@ -1677,7 +1709,7 @@ class App:
         if audit_error is not None:
             self.status += " · Audit-Protokoll nicht schreibbar"
         label = self.pending_activity or " ".join(result.command[-3:])
-        self.activities.insert(0, Activity(datetime.now().strftime("%H:%M:%S"), label, result.ok))
+        self.activities.insert(0, Activity(datetime.now(timezone.utc).astimezone().strftime("%H:%M:%S"), label, result.ok))
         del self.activities[8:]
         self.pending_activity = ""
         recheck_server = self.recheck_server_after_result
@@ -2076,10 +2108,12 @@ class App:
                 window.addstr(row, x + width - 1, "║", attr)
         except curses.error:
             try:
-                window.hline(y, x + 1, curses.ACS_HLINE, width - 2, attr)
-                window.hline(y + height - 1, x + 1, curses.ACS_HLINE, width - 2, attr)
-                window.vline(y + 1, x, curses.ACS_VLINE, height - 2, attr)
-                window.vline(y + 1, x + width - 1, curses.ACS_VLINE, height - 2, attr)
+                window.attron(attr)
+                window.hline(y, x + 1, curses.ACS_HLINE, width - 2)
+                window.hline(y + height - 1, x + 1, curses.ACS_HLINE, width - 2)
+                window.vline(y + 1, x, curses.ACS_VLINE, height - 2)
+                window.vline(y + 1, x + width - 1, curses.ACS_VLINE, height - 2)
+                window.attroff(attr)
                 window.addch(y, x, curses.ACS_ULCORNER, attr)
                 window.addch(y, x + width - 1, curses.ACS_URCORNER, attr)
                 window.addch(y + height - 1, x, curses.ACS_LLCORNER, attr)
@@ -2240,7 +2274,7 @@ class App:
         prompt: str,
         options: tuple[tuple[str, str], ...],
         current: str,
-    ) -> str | None | object:
+    ) -> str | None | WizardBack:
         if not options:
             return None
         selected = next((index for index, (_label, value) in enumerate(options) if value == current), 0)
@@ -2287,7 +2321,7 @@ class App:
         question: str,
         *,
         default: bool,
-    ) -> bool | None | object:
+    ) -> bool | None | WizardBack:
         height, width = screen.getmaxyx()
         box_width = min(width - 4, 76)
         box_height = 9
@@ -2323,7 +2357,7 @@ class App:
         screen: curses.window,
         path: Path,
         config: SynadmConfig,
-    ) -> bool | object:
+    ) -> bool | WizardBack:
         height, width = screen.getmaxyx()
         box_width = min(width - 4, 82)
         box_height = 16
@@ -2356,7 +2390,7 @@ class App:
         _height, width = screen.getmaxyx()
         self._safe_add(screen, 0, 1, "synadm TUI", curses.A_BOLD | self._color(1))
         self._safe_add(screen, 0, 13, f"CSV-Import · {title}", curses.A_BOLD)
-        steps = ((1, "Datei"), (2, "Format"), (3, "Zuordnung"), (4, "Prüfen"))
+        steps = ((1, "Datei"), (2, "Format"), (3, "Zuordnung"), (4, "Domain"), (5, "Prüfen"))
         rendered = "  ".join(f"{number} {label}" for number, label in steps)
         start = max(1, width - len(rendered) - 2)
         position = start
@@ -2391,7 +2425,7 @@ class App:
         *,
         initial: str = "",
         secret: bool = False,
-    ) -> str | None:
+    ) -> str | None | WizardBack:
         height, width = screen.getmaxyx()
         box_width = min(width - 4, 76)
         box_height = 7
@@ -2399,6 +2433,9 @@ class App:
         window = curses.newwin(box_height, box_width, y, x)
         window.keypad(True)
         value: list[str] = list(initial)
+        cursor = len(value)
+        offset = 0
+        field_width = box_width - 5
         curses.curs_set(1)
         try:
             while True:
@@ -2408,9 +2445,14 @@ class App:
                 self._safe_add(window, 2, 2, hint[: box_width - 4], curses.A_DIM)
                 shown = "".join(value)
                 display = "•" * len(shown) if secret else shown
-                self._safe_add(window, 4, 2, display[-(box_width - 5) :])
-                self._safe_add(window, 5, 2, "Enter weiter · Shift+Tab zurück · Esc abbrechen", curses.A_DIM)
-                window.move(4, min(box_width - 3, 2 + len(display)))
+                if cursor < offset:
+                    offset = cursor
+                elif cursor > offset + field_width:
+                    offset = cursor - field_width
+                visible = display[offset : offset + field_width]
+                self._safe_add(window, 4, 2, visible)
+                self._safe_add(window, 5, 2, "←/→ Cursor · Enter weiter · Shift+Tab zurück · Esc abbrechen", curses.A_DIM)
+                window.move(4, min(box_width - 3, 2 + cursor - offset))
                 window.refresh()
                 key = window.get_wch()
                 if key in ("\n", "\r", curses.KEY_ENTER):
@@ -2419,17 +2461,30 @@ class App:
                     return None
                 if key == curses.KEY_BTAB:
                     return WIZARD_BACK
-                if key in (curses.KEY_BACKSPACE, "\b", "\x7f"):
-                    if value:
-                        value.pop()
-                    else:
+                if key in (curses.KEY_LEFT, "\x02"):
+                    cursor = max(0, cursor - 1)
+                elif key in (curses.KEY_RIGHT, "\x06"):
+                    cursor = min(len(value), cursor + 1)
+                elif key == curses.KEY_HOME:
+                    cursor = 0
+                elif key == curses.KEY_END:
+                    cursor = len(value)
+                elif key in (curses.KEY_BACKSPACE, "\b", "\x7f"):
+                    if cursor > 0:
+                        value.pop(cursor - 1)
+                        cursor -= 1
+                    elif not value:
                         return WIZARD_BACK
+                elif key == curses.KEY_DC:
+                    if cursor < len(value):
+                        value.pop(cursor)
                 elif isinstance(key, str) and key.isprintable():
-                    value.append(key)
+                    value.insert(cursor, key)
+                    cursor += 1
         finally:
             curses.curs_set(0)
 
-    def _choose_delimiter(self, screen: curses.window, detected: str) -> str | None | object:
+    def _choose_delimiter(self, screen: curses.window, detected: str) -> str | None | WizardBack:
         options = (
             ("Semikolon", ";"),
             ("Komma", ","),
@@ -2447,7 +2502,7 @@ class App:
         while True:
             window.erase()
             self._draw_dialog_frame(window)
-            self._draw_dialog_heading(window, "CSV-Import · 2/4 · Trennzeichen", curses.A_BOLD | self._color(1))
+            self._draw_dialog_heading(window, "CSV-Import · 2/5 · Trennzeichen", curses.A_BOLD | self._color(1))
             self._safe_add(window, 2, 2, "Erkannt – bei Bedarf ändern:", curses.A_DIM)
             label, value = options[selected]
             shown = "TAB" if value == "\t" else value
@@ -2481,6 +2536,52 @@ class App:
                 else:
                     return None
 
+    def _choose_csv_user_id_handling(
+        self,
+        screen: curses.window,
+        *,
+        user_id_mode: str,
+        homeserver: str,
+    ) -> tuple[str, str] | None | WizardBack:
+        selected_mode = self._select_dialog_option(
+            screen,
+            "CSV-Import · 4/5 · Matrix-Domain",
+            "Wie sollen Benutzer-IDs aus der CSV behandelt werden?",
+            (
+                ("Unverändert übernehmen", "preserve"),
+                ("Homeserver ergänzen, wenn Domain fehlt", "append_missing"),
+                ("Homeserver immer setzen/ersetzen", "replace"),
+            ),
+            user_id_mode,
+        )
+        if isinstance(selected_mode, WizardBack):
+            return WIZARD_BACK
+        if selected_mode is None:
+            return None
+        if selected_mode == "preserve":
+            return selected_mode, ""
+
+        while True:
+            result = self._prompt(
+                screen,
+                "CSV-Import · 4/5 · Homeserver",
+                "Matrix-Homeserver-Domain, z. B. matrix.example.org – nicht die API-URL",
+                initial=homeserver,
+            )
+            if isinstance(result, WizardBack):
+                return WIZARD_BACK
+            if result is None:
+                return None
+            try:
+                normalized = normalize_homeserver(result)
+            except CsvImportError as error:
+                self.status = str(error)
+                continue
+            if not normalized:
+                self.status = "Bitte die Matrix-Homeserver-Domain angeben"
+                continue
+            return selected_mode, normalized
+
     def _ask_yes_no(
         self,
         screen: curses.window,
@@ -2488,7 +2589,7 @@ class App:
         question: str,
         *,
         default: bool = False,
-    ) -> bool | None | object:
+    ) -> bool | None | WizardBack:
         height, width = screen.getmaxyx()
         self._draw_csv_backdrop(screen, 2, "Format festlegen", "CSV-Format")
         box_width = min(width - 4, 70)
@@ -2533,7 +2634,7 @@ class App:
         data: CsvData,
         *,
         initial: dict[str, int | None] | None = None,
-    ) -> dict[str, int | None] | None | object:
+    ) -> dict[str, int | None] | None | WizardBack:
         aliases = {
             "user_id": {"user", "username", "userid", "user_id", "benutzer", "benutzer-id", "mxid"},
             "password": {"password", "passwort", "kennwort"},
@@ -2654,7 +2755,7 @@ class App:
         data: CsvData,
         entries: tuple[ImportEntry, ...],
         mapping: dict[str, int | None],
-    ) -> bool | object:
+    ) -> bool | WizardBack:
         height, width = screen.getmaxyx()
         self._draw_csv_backdrop(screen, 4, "Import prüfen", "Zusammenfassung")
         box_height = min(height - 2, 16)
@@ -2665,7 +2766,7 @@ class App:
         while True:
             window.erase()
             self._draw_dialog_frame(window)
-            self._draw_dialog_heading(window, "CSV-Import · 4/4 · Vorschau", curses.A_BOLD | self._color(5))
+            self._draw_dialog_heading(window, "CSV-Import · 5/5 · Vorschau", curses.A_BOLD | self._color(5))
             mapped = [field.title for field in FIELDS if mapping.get(field.key) is not None]
             self._safe_add(window, 3, 2, f"{len(entries)} Benutzer · Felder: {', '.join(mapped)}"[: box_width - 4])
             self._safe_add(window, 5, 2, "Die ersten Datensätze:", curses.A_BOLD)

@@ -6,7 +6,6 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-
 PREFERRED_COLLECTIONS = (
     "users", "rooms", "media", "devices", "members", "joined_rooms", "chunk", "results",
 )
@@ -62,7 +61,7 @@ class TableView:
             self.sort_key = self.sort_key or self.columns[0]
 
     @classmethod
-    def from_json(cls, text: str) -> "TableView | None":
+    def from_json(cls, text: str) -> TableView | None:
         try:
             payload = json.loads(text)
         except (json.JSONDecodeError, TypeError):

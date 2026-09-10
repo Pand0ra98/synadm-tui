@@ -4,7 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from synadm_tui.configuration import SynadmConfig, backup_synadm_config, write_synadm_config
+from synadm_tui.configuration import (
+    SynadmConfig,
+    backup_synadm_config,
+    write_synadm_config,
+)
 
 
 class ConfigurationTests(unittest.TestCase):

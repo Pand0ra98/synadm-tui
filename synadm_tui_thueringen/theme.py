@@ -8,7 +8,6 @@ from pathlib import Path
 from synadm_tui.app import Theme
 from synadm_tui.edition import Edition
 
-
 ASSETS = Path(__file__).resolve().parent / "assets"
 
 THURINGIA_CREST = (

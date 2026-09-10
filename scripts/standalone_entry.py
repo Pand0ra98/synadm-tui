@@ -2,5 +2,4 @@
 
 from synadm_tui.cli import main
 
-
 raise SystemExit(main())

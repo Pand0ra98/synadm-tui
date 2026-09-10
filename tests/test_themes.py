@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from synadm_tui.app import App, THEMES, THEMES_BY_KEY
-from synadm_tui.edition import Edition, STANDARD_EDITION
+from synadm_tui.app import THEMES, THEMES_BY_KEY, App
+from synadm_tui.edition import STANDARD_EDITION, Edition
 
 
 class ThemeTests(unittest.TestCase):
@@ -16,10 +16,9 @@ class ThemeTests(unittest.TestCase):
             self.assertTrue(theme.ready_label)
 
     def test_saved_theme_is_loaded_from_xdg_config(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            with patch.dict(os.environ, {"XDG_CONFIG_HOME": directory}):
-                self.assertTrue(App._save_theme(THEMES_BY_KEY["matrix"]))
-                self.assertEqual(App._load_theme().key, "matrix")
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"XDG_CONFIG_HOME": directory}):
+            self.assertTrue(App._save_theme(THEMES_BY_KEY["matrix"]))
+            self.assertEqual(App._load_theme().key, "matrix")
 
     def test_external_edition_requires_registered_theme(self) -> None:
         external = Edition("external", "External", "external", "external", ("external",))

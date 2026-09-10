@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import csv
 import io
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Mapping
+
+USER_ID_MODES = ("preserve", "append_missing", "replace")
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +103,18 @@ def normalize_delimiter(value: str | None) -> str:
     return cleaned
 
 
-def build_entries(data: CsvData, mapping: Mapping[str, int | None]) -> tuple[ImportEntry, ...]:
+def build_entries(
+    data: CsvData,
+    mapping: Mapping[str, int | None],
+    *,
+    user_id_mode: str = "preserve",
+    homeserver: str = "",
+) -> tuple[ImportEntry, ...]:
+    homeserver = normalize_homeserver(homeserver)
+    if user_id_mode not in USER_ID_MODES:
+        raise CsvImportError(f"Unbekannte Benutzer-ID-Behandlung: {user_id_mode!r}.")
+    if user_id_mode != "preserve" and not homeserver:
+        raise CsvImportError("Für diese Benutzer-ID-Behandlung muss eine Homeserver-Domain angegeben werden.")
     user_column = mapping.get("user_id")
     if user_column is None:
         raise CsvImportError("Die Benutzer-ID muss einer Spalte zugeordnet werden.")
@@ -111,7 +124,7 @@ def build_entries(data: CsvData, mapping: Mapping[str, int | None]) -> tuple[Imp
     for row_index, row in enumerate(data.rows):
         line = first_data_line + row_index
         try:
-            entry = _build_entry(row, line, mapping)
+            entry = _build_entry(row, line, mapping, user_id_mode=user_id_mode, homeserver=homeserver)
         except CsvImportError as error:
             errors.append(str(error))
         else:
@@ -125,9 +138,59 @@ def build_entries(data: CsvData, mapping: Mapping[str, int | None]) -> tuple[Imp
     return tuple(entries)
 
 
-def _build_entry(row: tuple[str, ...], line: int, mapping: Mapping[str, int | None]) -> ImportEntry:
+def normalize_homeserver(value: str) -> str:
+    cleaned = value.strip().lower().strip("/")
+    if cleaned.startswith(("http://", "https://")):
+        raise CsvImportError("Bitte nur die Matrix-Homeserver-Domain angeben, nicht die API-URL.")
+    if "/" in cleaned:
+        raise CsvImportError("Die Homeserver-Domain darf keinen Pfad enthalten.")
+    if "@" in cleaned:
+        raise CsvImportError("Die Homeserver-Domain darf keinen Benutzerteil enthalten.")
+    if cleaned.startswith(":") or cleaned.endswith(":"):
+        raise CsvImportError("Die Homeserver-Domain ist unvollständig.")
+    if any(character.isspace() for character in cleaned):
+        raise CsvImportError("Die Homeserver-Domain darf keine Leerzeichen enthalten.")
+    return cleaned
+
+
+def normalize_user_id(value: str, *, mode: str = "preserve", homeserver: str = "") -> str:
+    user_id = value.strip()
+    if not user_id:
+        return ""
+    if mode == "preserve":
+        return user_id
+    homeserver = normalize_homeserver(homeserver)
+    if not homeserver:
+        raise CsvImportError("Für diese Benutzer-ID-Behandlung muss eine Homeserver-Domain angegeben werden.")
+    if mode not in USER_ID_MODES:
+        raise CsvImportError(f"Unbekannte Benutzer-ID-Behandlung: {mode!r}.")
+
+    raw = user_id.removeprefix("@")
+    has_domain = ":" in raw
+    localpart = raw.split(":", 1)[0].strip() if has_domain else raw.strip()
+    if not localpart:
+        return ""
+    if any(character.isspace() for character in localpart):
+        raise CsvImportError(f"Ungültige Benutzer-ID {value!r}: Der Benutzername darf keine Leerzeichen enthalten.")
+    if mode == "append_missing" and has_domain:
+        return user_id if user_id.startswith("@") else f"@{raw}"
+    return f"@{localpart}:{homeserver}"
+
+
+def _build_entry(
+    row: tuple[str, ...],
+    line: int,
+    mapping: Mapping[str, int | None],
+    *,
+    user_id_mode: str = "preserve",
+    homeserver: str = "",
+) -> ImportEntry:
     values = {key: _cell(row, column) for key, column in mapping.items()}
-    user_id = values.get("user_id", "").strip()
+    raw_user_id = values.get("user_id", "").strip()
+    try:
+        user_id = normalize_user_id(raw_user_id, mode=user_id_mode, homeserver=homeserver)
+    except CsvImportError as error:
+        raise CsvImportError(f"Zeile {line}: {error}") from error
     if not user_id:
         raise CsvImportError(f"Zeile {line}: Benutzer-ID fehlt.")
     args = ["user", "modify", user_id]

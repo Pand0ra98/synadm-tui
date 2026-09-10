@@ -7,11 +7,11 @@ import argparse
 import base64
 import os
 import sys
-import tomllib
 import urllib.error
 import urllib.request
 from pathlib import Path
 
+import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_DIR = ROOT / "dist" / "packages"

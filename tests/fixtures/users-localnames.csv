@@ -1,0 +1,4 @@
+username;password;display_name;email;admin;type;locked
+alice;Start-123;Alice Beispiel;alice@example.org;nein;regular;nein
+service-bot;Bot-456;Service Bot;;nein;bot;nein
+support;Support-789;Support Konto;support@example.org;ja;support;nein

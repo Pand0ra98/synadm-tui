@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import argparse
+
 from . import __version__
 from .app import App, Theme
-from .edition import Edition, STANDARD_EDITION
+from .edition import STANDARD_EDITION, Edition
 from .runner import SynadmRunner
 
 

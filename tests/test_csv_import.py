@@ -9,6 +9,8 @@ from synadm_tui.csv_import import (
     build_entries,
     inspect_csv,
     normalize_delimiter,
+    normalize_homeserver,
+    normalize_user_id,
     redact_args,
 )
 
@@ -56,6 +58,49 @@ class CsvImportTests(unittest.TestCase):
         entry = build_entries(data, {"user_id": 0, "password": 1, "display_name": 2})[0]
         self.assertEqual(entry.line, 1)
         self.assertEqual(entry.user_id, "bob")
+
+    def test_can_append_homeserver_domain_when_user_id_has_no_domain(self) -> None:
+        data = inspect_csv(self.csv("user;password\nalice;secret\n@bob:other.example;secret\n"))
+        entries = build_entries(
+            data,
+            {"user_id": 0, "password": 1},
+            user_id_mode="append_missing",
+            homeserver="matrix.example.org",
+        )
+        self.assertEqual(entries[0].user_id, "@alice:matrix.example.org")
+        self.assertEqual(entries[0].args[:4], ("user", "modify", "@alice:matrix.example.org", "--password"))
+        self.assertEqual(entries[1].user_id, "@bob:other.example")
+
+    def test_can_replace_homeserver_domain_for_csv_user_ids(self) -> None:
+        data = inspect_csv(self.csv("user;password\nalice;secret\n@bob:public.example;secret\n"))
+        entries = build_entries(
+            data,
+            {"user_id": 0, "password": 1},
+            user_id_mode="replace",
+            homeserver="matrix.example.org",
+        )
+        self.assertEqual([entry.user_id for entry in entries], [
+            "@alice:matrix.example.org",
+            "@bob:matrix.example.org",
+        ])
+
+    def test_homeserver_normalization_rejects_api_urls_but_allows_ports(self) -> None:
+        self.assertEqual(normalize_homeserver(" Matrix.Example.Org:8448/ "), "matrix.example.org:8448")
+        with self.assertRaisesRegex(CsvImportError, "API-URL"):
+            normalize_homeserver("https://matrix.example.org")
+        with self.assertRaisesRegex(CsvImportError, "Benutzerteil"):
+            normalize_homeserver("@alice:matrix.example.org")
+
+    def test_user_id_normalization_modes(self) -> None:
+        self.assertEqual(normalize_user_id("alice", mode="preserve"), "alice")
+        self.assertEqual(
+            normalize_user_id("alice", mode="append_missing", homeserver="matrix.example.org"),
+            "@alice:matrix.example.org",
+        )
+        self.assertEqual(
+            normalize_user_id("@alice:public.example", mode="replace", homeserver="matrix.example.org"),
+            "@alice:matrix.example.org",
+        )
 
     def test_rejects_invalid_boolean_with_source_line(self) -> None:
         data = inspect_csv(self.csv("user;admin\nalice;vielleicht\n"))

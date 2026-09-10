@@ -7,10 +7,9 @@ import os
 import secrets
 import shutil
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
-from datetime import datetime
-
 
 OUTPUT_FORMATS = ("yaml", "json", "minified", "human", "pprint")
 DISCOVERY_MODES = ("well-known", "dns")
@@ -92,7 +91,7 @@ def write_synadm_config(path: Path, config: SynadmConfig) -> None:
 def backup_synadm_config(path: Path) -> Path:
     """Create an owner-only timestamped backup next to an existing config."""
     source = path.expanduser()
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d-%H%M%S")
     backup = source.with_name(f"{source.name}.bak-{stamp}")
     counter = 1
     while backup.exists():

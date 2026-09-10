@@ -7,7 +7,6 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
-
 IMAGE_ID = 73113
 
 

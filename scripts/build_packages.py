@@ -11,10 +11,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
@@ -29,6 +29,9 @@ class Edition:
     executable: str
     summary: str
     description: str
+    desktop_name: str
+    desktop_comment: str
+    icon_source: Path
 
 
 EDITIONS = (
@@ -37,12 +40,18 @@ EDITIONS = (
         "synadm-tui",
         "Terminal-Oberfläche für die Matrix-Synapse-Administration",
         "Eine tastaturorientierte, von LazyDocker inspirierte Oberfläche für synadm.",
+        "synadm TUI",
+        "Matrix-Synapse-Administration im Terminal",
+        ROOT / "synadm_tui" / "assets" / "retro-cyberspace.png",
     ),
     Edition(
         "synadm-tui-thueringen",
         "synadm-tui-thueringen",
         "Thüringen-Edition der synadm Terminal-Oberfläche",
         "Regionales Branding auf dem unveränderten Anwendungskern von synadm-tui.",
+        "synadm TUI Thüringen",
+        "Matrix-Synapse-Administration im Terminal mit Thüringen-Theme",
+        ROOT / "synadm_tui_thueringen" / "assets" / "thueringen-wappen.png",
     ),
 )
 
@@ -106,15 +115,37 @@ def write_debian_control(stage: Path, edition: Edition, version: str, arch: str)
     (control_dir / "control").write_text(control, encoding="utf-8")
 
 
+def desktop_entry(edition: Edition) -> str:
+    return (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        f"Name={edition.desktop_name}\n"
+        "GenericName=Matrix Synapse Administration\n"
+        f"Comment={edition.desktop_comment}\n"
+        f"Exec={edition.executable}\n"
+        f"Icon={edition.package}\n"
+        "Terminal=true\n"
+        "Categories=System;TerminalEmulator;ConsoleOnly;\n"
+        "Keywords=Matrix;Synapse;synadm;Admin;TUI;\n"
+        "StartupNotify=false\n"
+    )
+
+
 def populate_payload(stage: Path, edition: Edition) -> None:
     binary_dir = stage / "usr" / "bin"
     doc_dir = stage / "usr" / "share" / "doc" / edition.package
+    applications_dir = stage / "usr" / "share" / "applications"
+    icon_dir = stage / "usr" / "share" / "pixmaps"
     binary_dir.mkdir(parents=True)
     doc_dir.mkdir(parents=True)
+    applications_dir.mkdir(parents=True)
+    icon_dir.mkdir(parents=True)
     shutil.copy2(DIST / edition.executable, binary_dir / edition.executable)
     (binary_dir / edition.executable).chmod(0o755)
     shutil.copy2(ROOT / "README.md", doc_dir / "README.md")
     shutil.copy2(ROOT / "LICENSE", doc_dir / "copyright")
+    (applications_dir / f"{edition.package}.desktop").write_text(desktop_entry(edition), encoding="utf-8")
+    shutil.copy2(edition.icon_source, icon_dir / f"{edition.package}.png")
 
 
 def normalize_permissions(stage: Path, executable: str) -> None:
@@ -154,6 +185,8 @@ URL:            {HOMEPAGE}
 Source0:        {edition.executable}
 Source1:        README.md
 Source2:        LICENSE
+Source3:        {edition.package}.desktop
+Source4:        {edition.package}.png
 BuildArch:      {rpm_arch}
 Requires:       glibc >= 2.34
 Requires:       zlib
@@ -174,9 +207,13 @@ Requires:       pipx
 install -Dpm 0755 %{{SOURCE0}} %{{buildroot}}%{{_bindir}}/{edition.executable}
 install -Dpm 0644 %{{SOURCE1}} %{{buildroot}}%{{_docdir}}/{edition.package}/README.md
 install -Dpm 0644 %{{SOURCE2}} %{{buildroot}}%{{_licensedir}}/{edition.package}/LICENSE
+install -Dpm 0644 %{{SOURCE3}} %{{buildroot}}%{{_datadir}}/applications/{edition.package}.desktop
+install -Dpm 0644 %{{SOURCE4}} %{{buildroot}}%{{_datadir}}/pixmaps/{edition.package}.png
 
 %files
 %{{_bindir}}/{edition.executable}
+%{{_datadir}}/applications/{edition.package}.desktop
+%{{_datadir}}/pixmaps/{edition.package}.png
 %doc %{{_docdir}}/{edition.package}/README.md
 %license %{{_licensedir}}/{edition.package}/LICENSE
 
@@ -202,6 +239,8 @@ def build_rpm(version: str, rpm_arch: str) -> list[Path]:
     shutil.copy2(ROOT / "LICENSE", topdir / "SOURCES" / "LICENSE")
     for edition in EDITIONS:
         shutil.copy2(DIST / edition.executable, topdir / "SOURCES" / edition.executable)
+        (topdir / "SOURCES" / f"{edition.package}.desktop").write_text(desktop_entry(edition), encoding="utf-8")
+        shutil.copy2(edition.icon_source, topdir / "SOURCES" / f"{edition.package}.png")
         spec = topdir / "SPECS" / f"{edition.package}.spec"
         spec.write_text(rpm_spec(edition, version, rpm_arch), encoding="utf-8")
         command = [

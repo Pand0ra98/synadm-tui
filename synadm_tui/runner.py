@@ -7,9 +7,9 @@ import os
 import shutil
 import subprocess
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,12 +62,11 @@ class SynadmRunner:
             process = subprocess.run(
                 command,
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 timeout=self.timeout,
                 check=False,
-                env={**os.environ, "NO_COLOR": "1"},
+                env=_subprocess_env(),
             )
             return Result(
                 tuple(command), process.returncode, process.stdout, process.stderr,
@@ -91,6 +90,26 @@ def pretty_output(text: str) -> str:
         return json.dumps(json.loads(stripped), ensure_ascii=False, indent=2)
     except (json.JSONDecodeError, TypeError):
         return stripped
+
+
+def _subprocess_env() -> dict[str, str]:
+    """Return a clean environment for launching external tools.
+
+    PyInstaller one-file binaries adjust the dynamic library path for their
+    embedded runtime. If a separately installed Python CLI like synadm inherits
+    that path, it can load the wrong libpython/OpenSSL libraries and fail with
+    errors such as a missing ssl module. PyInstaller stores the previous value
+    in LD_LIBRARY_PATH_ORIG; restore that value or remove LD_LIBRARY_PATH.
+    """
+
+    environment = dict(os.environ)
+    original_library_path = environment.get("LD_LIBRARY_PATH_ORIG")
+    if original_library_path:
+        environment["LD_LIBRARY_PATH"] = original_library_path
+    else:
+        environment.pop("LD_LIBRARY_PATH", None)
+    environment["NO_COLOR"] = "1"
+    return environment
 
 
 def _decode(value: bytes | str | None) -> str:

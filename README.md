@@ -134,6 +134,20 @@ dist/packages/synadm-tui-thueringen-<VERSION>-1.<ARCH>.rpm
 
 Die Build-Architektur wird automatisch auf `amd64`/`x86_64` beziehungsweise `arm64`/`aarch64` abgebildet. Das Skript verweigert die Paketierung, wenn die Versionsnummer einer nativen Datei nicht zu `pyproject.toml` passt.
 
+Die DEB- und RPM-Pakete installieren außerdem je Edition einen grafischen Starter unter `/usr/share/applications/` sowie ein Icon unter `/usr/share/pixmaps/`. Dadurch erscheinen **synadm TUI** und **synadm TUI Thüringen** im Startmenü beziehungsweise Application-Launcher grafischer Linux-Desktops. Eine persönliche Desktop-Verknüpfung kann daraus bei Bedarf kopiert werden:
+
+```bash
+cp /usr/share/applications/synadm-tui.desktop ~/Desktop/
+chmod +x ~/Desktop/synadm-tui.desktop
+```
+
+Für die Thüringen-Edition:
+
+```bash
+cp /usr/share/applications/synadm-tui-thueringen.desktop ~/Desktop/
+chmod +x ~/Desktop/synadm-tui-thueringen.desktop
+```
+
 Offizielle RPM-Builds werden automatisch mit dem Schlüssel
 `A589 2362 4002 F769 A768 3FD6 C187 58AE CA92 C968` signiert, wenn dessen privater Teil unter `~/.local/share/synadm-tui/rpm-signing/` vorhanden ist. Im Repository liegt ausschließlich der öffentliche Schlüssel. Fremde lokale Builds bleiben ohne privaten Schlüssel unsigniert.
 
@@ -176,9 +190,9 @@ sudo apt install synadm-tui
 ```
 
 APT wählt automatisch die neueste verfügbare Version. Eine Versionsangabe wie
-`synadm-tui=0.20` ist für die normale Installation nicht erforderlich.
+`synadm-tui=0.21` ist für die normale Installation nicht erforderlich.
 
-Dieser Ablauf wurde mit Version 0.20 in einer isolierten APT-Umgebung geprüft: Signaturprüfung, Paketauflösung, Download, Dateirechte und Programmstart waren erfolgreich.
+Dieser Ablauf wurde mit Version 0.21 in einer isolierten APT-Umgebung geprüft: Signaturprüfung, Paketauflösung, Download, Dateirechte und Programmstart waren erfolgreich.
 
 Fedora, RHEL und kompatible Systeme:
 
@@ -248,14 +262,23 @@ synadm user modify @alice:example.org --password 'Start-123' --display-name 'Ali
 
 ## Benutzer aus CSV importieren
 
-Unter **Benutzer → Benutzer aus CSV importieren** führt ein Assistent durch vier Schritte:
+Unter **Benutzer → Benutzer aus CSV importieren** führt ein Assistent durch fünf Schritte:
 
 1. UTF-8-CSV-Datei im eingebauten Dateibrowser auswählen
 2. automatisch erkanntes Trennzeichen in einem Auswahlmenü prüfen oder ändern und Kopfzeile angeben
 3. CSV-Spalten mit `←`/`→` den Zielfeldern zuordnen; eine Tabelle zeigt dabei Kopfzeile und erste Datensätze
-4. Benutzer-Vorschau prüfen und Import bestätigen
+4. Behandlung der Benutzer-ID-Domain wählen
+5. Benutzer-Vorschau prüfen und Import bestätigen
 
 Unterstützte Zielfelder sind Benutzer-ID, Passwort, Anzeigename, E-Mail, Adminstatus, Benutzertyp, Avatar-URL und Sperrstatus. Nur die Benutzer-ID ist verpflichtend; zusätzlich muss mindestens ein anzulegender Wert vorhanden sein. Wahrheitswerte akzeptieren unter anderem `ja`/`nein`, `true`/`false` und `1`/`0`. Zulässige Benutzertypen sind `regular`, `bot` und `support`.
+
+Für Installationen, bei denen die öffentliche Synapse-API-Domain nicht der Matrix-Homeserver-Domain entspricht, kann der Assistent die Benutzer-IDs passend aufbereiten. Zur Auswahl stehen:
+
+- Benutzer-IDs unverändert aus der CSV übernehmen
+- Homeserver-Domain nur ergänzen, wenn sie in der CSV fehlt
+- Homeserver-Domain immer setzen und vorhandene Domains ersetzen
+
+Die abzufragende Domain ist der Matrix-`server_name`, also der Teil hinter dem Doppelpunkt in Matrix-IDs wie `@alice:matrix.example.org` — nicht zwingend die öffentliche API-URL.
 
 Beispiel:
 

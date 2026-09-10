@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Sequence
-
 
 SECRET_OPTIONS = {"--password", "-P", "--token", "-t"}
 

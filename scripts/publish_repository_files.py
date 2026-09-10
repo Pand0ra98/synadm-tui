@@ -9,7 +9,6 @@ from pathlib import Path
 
 from publish_packages import tea_token, upload
 
-
 ROOT = Path(__file__).resolve().parent.parent
 FILES = (
     "RPM-GPG-KEY-synadm-tui",
@@ -35,8 +34,10 @@ def main() -> int:
     jobs = [
         (
             ROOT / "packaging" / filename,
-            f"{base}/api/packages/{args.owner}/generic/"
-            f"synadm-tui-repository/{args.registry_version}/{filename}",
+            (
+                f"{base}/api/packages/{args.owner}/generic/"
+                f"synadm-tui-repository/{args.registry_version}/{filename}"
+            ),
         )
         for filename in FILES
     ]

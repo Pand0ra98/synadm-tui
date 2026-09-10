@@ -4,7 +4,7 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-from synadm_tui.runner import SynadmRunner, pretty_output
+from synadm_tui.runner import SynadmRunner, _subprocess_env, pretty_output
 
 
 class RunnerTests(unittest.TestCase):
@@ -34,6 +34,22 @@ class RunnerTests(unittest.TestCase):
         self.assertNotIn("shell", run.call_args.kwargs)
         self.assertIs(run.call_args.kwargs["stdin"], subprocess.DEVNULL)
         self.assertEqual(run.call_args.kwargs["timeout"], 12)
+        self.assertEqual(run.call_args.kwargs["env"]["NO_COLOR"], "1")
+
+    @patch.dict("synadm_tui.runner.os.environ", {
+        "LD_LIBRARY_PATH": "/tmp/pyinstaller",
+        "LD_LIBRARY_PATH_ORIG": "/usr/lib",
+    }, clear=True)
+    def test_subprocess_env_restores_original_library_path(self) -> None:
+        environment = _subprocess_env()
+        self.assertEqual(environment["LD_LIBRARY_PATH"], "/usr/lib")
+        self.assertEqual(environment["NO_COLOR"], "1")
+
+    @patch.dict("synadm_tui.runner.os.environ", {"LD_LIBRARY_PATH": "/tmp/pyinstaller"}, clear=True)
+    def test_subprocess_env_removes_pyinstaller_library_path_without_original(self) -> None:
+        environment = _subprocess_env()
+        self.assertNotIn("LD_LIBRARY_PATH", environment)
+        self.assertEqual(environment["NO_COLOR"], "1")
 
     @patch("synadm_tui.runner.subprocess.run", side_effect=FileNotFoundError)
     def test_missing_executable_is_a_result(self, _run) -> None:
