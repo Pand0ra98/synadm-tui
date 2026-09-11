@@ -5,6 +5,7 @@ from unittest.mock import ANY, Mock, patch
 
 from synadm_tui.app import WIZARD_BACK, App
 from synadm_tui.catalog import SECTIONS
+from synadm_tui.fake_synadm import FakeSynadmRunner
 from synadm_tui.runner import Result, SynadmRunner
 from synadm_tui.table_view import TableView
 
@@ -44,6 +45,25 @@ class NavigationTests(unittest.TestCase):
         self.assertTrue(lines[0].startswith("Status: "))
         self.assertTrue(lines[1].startswith("        "))
         self.assertTrue(all(len(line) <= 24 for line in lines))
+
+    def test_header_brand_marks_demo_mode(self) -> None:
+        self.assertEqual(self.app.brand, "S Y N A D M  //  T U I")
+        demo = App(FakeSynadmRunner())
+        self.assertEqual(demo.brand, "S Y N A D M  //  T U I  //  D E M O")
+        self.assertEqual(demo.compact_brand, "synadm TUI // DEMO")
+
+    @patch("synadm_tui.app.App._start_server_check")
+    def test_demo_mode_can_be_toggled_at_runtime(self, server_check) -> None:
+        original_runner = self.app.runner
+        self.app._handle_key(Mock(), ord("d"))
+        self.assertTrue(self.app.runner.demo_mode)
+        self.assertIn("D E M O", self.app.brand)
+        self.assertIn("Demo-Modus aktiv", self.app.status)
+        self.app._handle_key(Mock(), ord("d"))
+        self.assertIs(self.app.runner, original_runner)
+        self.assertFalse(self.app.runner.demo_mode)
+        self.assertNotIn("D E M O", self.app.brand)
+        self.assertEqual(server_check.call_count, 2)
 
     def test_left_returns_to_sections(self) -> None:
         self.app.focus = "commands"

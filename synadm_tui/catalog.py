@@ -113,6 +113,7 @@ SECTIONS = (
         (
             Command("Darstellung / Thema wählen", (), "Editionabhängige Farb- und Kontrastthemen", False, "choose_theme"),
             Command("Audit-Protokoll anzeigen", (), "Lokale, bereinigte Befehlschronik", False, "show_audit"),
+            Command("Demo-Modus umschalten", (), "Zwischen echter synadm-Verbindung und lokalem Demo-Backend wechseln", False, "toggle_demo"),
             Command("synadm-Erstkonfiguration", (), "Geführte, sichere Einrichtung", False, "configure_synadm"),
             Command("synadm installieren/aktualisieren", (), "Installation mit pipx", True, "install_synadm"),
             Command("synadm deinstallieren", (), "Sauber aus pipx entfernen", True, "uninstall_synadm"),

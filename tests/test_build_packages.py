@@ -17,7 +17,7 @@ SPEC.loader.exec_module(build_packages)
 
 class PackageBuildTests(unittest.TestCase):
     def test_project_version_matches_current_release(self) -> None:
-        self.assertEqual(build_packages.project_version(), "0.21")
+        self.assertEqual(build_packages.project_version(), "0.22")
 
     def test_supported_architecture_mapping(self) -> None:
         with mock.patch.object(build_packages.platform, "machine", return_value="x86_64"):
@@ -30,12 +30,12 @@ class PackageBuildTests(unittest.TestCase):
             (root / edition.executable).write_bytes(b"test executable")
             stage = root / "stage"
             with mock.patch.object(build_packages, "DIST", root):
-                build_packages.write_debian_control(stage, edition, "0.21", "amd64")
+                build_packages.write_debian_control(stage, edition, "0.22", "amd64")
             control = (stage / "DEBIAN" / "control").read_text(encoding="utf-8")
 
         self.assertIn("Package: synadm-tui\n", control)
-        self.assertIn("Version: 0.21\n", control)
-        self.assertNotIn("Package: synadm-tui=0.21", control)
+        self.assertIn("Version: 0.22\n", control)
+        self.assertNotIn("Package: synadm-tui=0.22", control)
         self.assertIn("ca-certificates", control)
         self.assertIn("openssl", control)
         self.assertIn("python3", control)
@@ -56,20 +56,24 @@ class PackageBuildTests(unittest.TestCase):
 
             desktop = stage / "usr" / "share" / "applications" / "synadm-tui.desktop"
             icon = stage / "usr" / "share" / "pixmaps" / "synadm-tui.png"
+            manpage = stage / "usr" / "share" / "man" / "man1" / "synadm-tui.1"
             self.assertTrue(desktop.is_file())
             self.assertTrue(icon.is_file())
+            self.assertTrue(manpage.is_file())
             desktop_text = desktop.read_text(encoding="utf-8")
             self.assertIn("Terminal=true", desktop_text)
             self.assertIn("Exec=synadm-tui", desktop_text)
             self.assertIn("Icon=synadm-tui", desktop_text)
+            self.assertIn(".TH SYNADM-TUI", manpage.read_text(encoding="utf-8"))
 
     def test_rpm_spec_contains_expected_binary(self) -> None:
         edition = build_packages.EDITIONS[0]
-        spec = build_packages.rpm_spec(edition, "0.21", "x86_64")
+        spec = build_packages.rpm_spec(edition, "0.22", "x86_64")
         self.assertIn("Name:           synadm-tui", spec)
         self.assertIn("%{_bindir}/synadm-tui", spec)
         self.assertIn("%{_datadir}/applications/synadm-tui.desktop", spec)
         self.assertIn("%{_datadir}/pixmaps/synadm-tui.png", spec)
+        self.assertIn("%{_mandir}/man1/synadm-tui.1*", spec)
         self.assertIn("Requires:       glibc >= 2.34", spec)
         self.assertIn("Requires:       zlib", spec)
         self.assertIn("Requires:       ca-certificates", spec)

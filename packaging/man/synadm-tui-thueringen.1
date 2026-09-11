@@ -1,0 +1,57 @@
+.TH SYNADM-TUI-THUERINGEN 1 "September 2026" "synadm-tui 0.22" "User Commands"
+.SH NAME
+synadm-tui-thueringen \- Thüringen edition of synadm-tui
+.SH SYNOPSIS
+.B synadm-tui-thueringen
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+.B synadm-tui-thueringen
+starts the Thüringen-branded edition of
+.BR synadm-tui .
+It uses the same application core, command line options, demo mode and package
+behavior as
+.BR synadm-tui ,
+but starts with the Thüringen visual profile.
+.SH OPTIONS
+The options are identical to
+.BR synadm-tui (1):
+.TP
+.B \-\-synadm " " \fIPATH\fR
+Use an alternative synadm executable.
+.TP
+.B \-\-config-file " " \fIPATH\fR
+Pass an alternative synadm configuration file to synadm.
+.TP
+.B \-\-timeout " " \fISECONDS\fR
+Set the timeout for each synadm call.
+.TP
+.B \-\-demo
+Start with the local demo backend.
+.TP
+.B \-\-demo-state " " \fIPATH\fR
+Use a custom JSON file for the local demo backend state.
+.TP
+.B \-\-version
+Show the program version and exit.
+.TP
+.B \-h, \-\-help
+Show command line help and exit.
+.SH KEYBOARD SHORTCUTS
+See
+.BR synadm-tui (1).
+The runtime demo toggle
+.B d
+also works in the Thüringen edition and marks the header with
+.BR "// D E M O" .
+.SH FILES
+.TP
+.I ~/.config/synadm-tui/theme-thueringen
+Theme setting for the Thüringen edition.
+.TP
+.I ~/.local/state/synadm-tui/demo-server.json
+Default local demo backend state.
+.SH SEE ALSO
+.BR synadm-tui (1),
+.BR synadm (1)
+.SH AUTHOR
+synadm-tui contributors

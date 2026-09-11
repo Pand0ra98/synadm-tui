@@ -32,6 +32,7 @@ class CatalogTests(unittest.TestCase):
         self.assertIn("uninstall_pipx", package_actions)
         self.assertIn("create_room", package_actions)
         self.assertIn("show_audit", package_actions)
+        self.assertIn("toggle_demo", package_actions)
 
 
 if __name__ == "__main__":

@@ -40,6 +40,7 @@ from .csv_import import (
     redact_args,
 )
 from .edition import STANDARD_EDITION, Edition
+from .fake_synadm import FakeSynadmRunner
 from .file_browser import list_entries
 from .room_creation import RoomCreation, RoomCreationError, parse_invitees
 from .runner import Result, SynadmRunner, pretty_output
@@ -222,6 +223,8 @@ class App:
         extra_themes: tuple[Theme, ...] = (),
     ) -> None:
         self.runner = runner
+        self.live_runner: SynadmRunner = runner if not runner.demo_mode else SynadmRunner()
+        self.demo_runner: FakeSynadmRunner | None = runner if isinstance(runner, FakeSynadmRunner) else None
         self.edition = edition
         self.themes_by_key = dict(THEMES_BY_KEY)
         self.themes_by_key.update((theme.key, theme) for theme in extra_themes)
@@ -250,6 +253,20 @@ class App:
         self.inline_image_signature: tuple[object, ...] | None = None
         self.pending_inline_image: tuple[Path, int, int, int, int] | None = None
         self.block_color_pairs: dict[tuple[int, int], int] = {}
+
+    @property
+    def brand(self) -> str:
+        label = "S Y N A D M  //  T U I"
+        if self.runner.demo_mode:
+            label += "  //  D E M O"
+        return label
+
+    @property
+    def compact_brand(self) -> str:
+        label = "synadm TUI"
+        if self.runner.demo_mode:
+            label += " // DEMO"
+        return label
 
     def run(self) -> None:
         locale.setlocale(locale.LC_ALL, "")
@@ -363,6 +380,10 @@ class App:
         if not self.running and key in (ord("t"), ord("T")):
             self._clear_inline_image()
             self._choose_theme(screen)
+            return
+        if not self.running and key in (ord("d"), ord("D")):
+            self._clear_inline_image()
+            self._toggle_demo_mode()
             return
         if not self.running and self.table_view is not None and key in (ord("v"), ord("V")):
             value = self._prompt(
@@ -585,6 +606,9 @@ class App:
             return
         if spec.action == "show_audit":
             self._show_audit()
+            return
+        if spec.action == "toggle_demo":
+            self._toggle_demo_mode()
             return
         extra_args = self._command_assistant(screen, spec, defaults)
         if extra_args is None:
@@ -1072,6 +1096,25 @@ class App:
         self.selection.output_offset = 0
         self.show_command_details = False
         self.status = f"Audit-Protokoll · {len(recent)} Einträge · {path}"
+
+    def _toggle_demo_mode(self) -> None:
+        if self.runner.demo_mode:
+            self.runner = self.live_runner
+            self.status = "Demo-Modus aus · echte synadm-Verbindung aktiv"
+            self.output = "Demo-Modus beendet. Befehle verwenden wieder die konfigurierte synadm-Verbindung."
+        else:
+            self.live_runner = self.runner
+            if self.demo_runner is None:
+                self.demo_runner = FakeSynadmRunner()
+            self.runner = self.demo_runner
+            self.status = "Demo-Modus aktiv · lokales Demo-Backend"
+            self.output = "Demo-Modus verwendet lokale JSON-Daten und keinen Synapse-Server."
+        self.result = None
+        self.table_view = None
+        self.selection.output_offset = 0
+        self.server_state = "Nicht geprüft"
+        self.server_version = "—"
+        self._start_server_check()
 
     @staticmethod
     def _typed_confirmation_target(args: list[str]) -> str | None:
@@ -1780,7 +1823,7 @@ class App:
             return
 
         self._safe_add(screen, 0, 0, " " * (width - 1), self._color(8))
-        brand = "S Y N A D M  //  T U I"
+        brand = self.brand
         self._safe_add(screen, 0, max(1, (width - len(brand)) // 2), brand, curses.A_BOLD | self._color(8))
         self._safe_add(screen, 0, 2, self.theme.badge, curses.A_BOLD | self._color(8))
         connection = f"● {self.server_state}"
@@ -1822,7 +1865,7 @@ class App:
 
         self._safe_add(screen, height - 2, 0, "═" * (width - 1), curses.A_BOLD | self._color(1))
         table_hint = "  Tab Tabelle  Enter Aktionen  v Filter  s Sortierung" if self.table_view is not None else ""
-        footer = f"{self.edition.name} · {self.theme.name}  │  Maus/↑/↓ wählen  Enter öffnen{table_hint}  ? Hilfe  q Ende"
+        footer = f"{self.edition.name} · {self.theme.name}  │  Maus/↑/↓ wählen  Enter öffnen{table_hint}  d Demo  ? Hilfe  q Ende"
         self._safe_add(screen, height - 1, 2, footer[: width - 4], curses.A_DIM)
         screen.refresh()
         self._sync_inline_image()
@@ -2193,6 +2236,7 @@ class App:
             ("f", "Befehle über alle Bereiche filtern"),
             ("c", "synadm-Konfigurationsassistent"),
             ("t", "Thema auswählen"),
+            ("d", "Demo-Modus ein-/ausschalten"),
             ("n · i · / · x", "Benutzer neu · CSV · Suche · Löschen"),
             ("a", "Raum anlegen"),
             ("v · s", "Tabelle filtern · sortieren"),
@@ -2388,8 +2432,9 @@ class App:
 
     def _draw_csv_header(self, screen: curses.window, step: int, title: str) -> None:
         _height, width = screen.getmaxyx()
-        self._safe_add(screen, 0, 1, "synadm TUI", curses.A_BOLD | self._color(1))
-        self._safe_add(screen, 0, 13, f"CSV-Import · {title}", curses.A_BOLD)
+        brand = self.compact_brand
+        self._safe_add(screen, 0, 1, brand, curses.A_BOLD | self._color(1))
+        self._safe_add(screen, 0, len(brand) + 4, f"CSV-Import · {title}", curses.A_BOLD)
         steps = ((1, "Datei"), (2, "Format"), (3, "Zuordnung"), (4, "Domain"), (5, "Prüfen"))
         rendered = "  ".join(f"{number} {label}" for number, label in steps)
         start = max(1, width - len(rendered) - 2)

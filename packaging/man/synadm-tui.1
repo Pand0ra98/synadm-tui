@@ -1,0 +1,108 @@
+.TH SYNADM-TUI 1 "September 2026" "synadm-tui 0.22" "User Commands"
+.SH NAME
+synadm-tui \- terminal user interface for Matrix Synapse administration with synadm
+.SH SYNOPSIS
+.B synadm-tui
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+.B synadm-tui
+is a keyboard-oriented terminal interface for the Matrix Synapse administration
+tool
+.BR synadm .
+It provides guided dialogs for common user, room, moderation, registration and
+maintenance workflows while still executing the underlying synadm commands.
+.PP
+The interface includes a local demo backend for development and demonstrations
+without a reachable Synapse server.
+.SH OPTIONS
+.TP
+.B \-\-synadm " " \fIPATH\fR
+Use an alternative synadm executable. The default is
+.BR synadm .
+.TP
+.B \-\-config-file " " \fIPATH\fR
+Pass an alternative synadm configuration file to synadm.
+.TP
+.B \-\-timeout " " \fISECONDS\fR
+Set the timeout for each synadm call. The default is 60 seconds.
+.TP
+.B \-\-demo
+Start with the local demo backend instead of a real synadm connection.
+.TP
+.B \-\-demo-state " " \fIPATH\fR
+Use a custom JSON file for the local demo backend state.
+.TP
+.B \-\-version
+Show the program version and exit.
+.TP
+.B \-h, \-\-help
+Show command line help and exit.
+.SH KEYBOARD SHORTCUTS
+.TP
+.B Up/Down, j/k
+Move within the active column.
+.TP
+.B Enter
+Open the selected area or execute the selected action.
+.TP
+.B Left, Esc, h
+Return from the command column to the area column.
+.TP
+.B d
+Toggle the local demo backend while the program is running.
+.TP
+.B c
+Open the guided synadm configuration assistant.
+.TP
+.B t
+Open the theme selector.
+.TP
+.B n
+Open the single user creation assistant.
+.TP
+.B i
+Open the CSV user import assistant.
+.TP
+.B /
+Open user search.
+.TP
+.B x
+Open the GDPR user deletion action.
+.TP
+.B a
+Open the room creation assistant.
+.TP
+.B f
+Open the global command palette.
+.TP
+.B ?
+Show keyboard help.
+.TP
+.B q
+Quit the program.
+.SH DEMO MODE
+The demo mode stores users, rooms and registration tokens in a local JSON file
+and never contacts a Synapse server. By default the state file is:
+.PP
+.I ~/.local/state/synadm-tui/demo-server.json
+.PP
+Demo mode can be enabled at startup with
+.B \-\-demo
+or toggled at runtime with
+.BR d .
+When demo mode is active, the header contains
+.BR "// D E M O" .
+.SH FILES
+.TP
+.I ~/.config/synadm-tui/
+Theme settings.
+.TP
+.I ~/.local/state/synadm-tui/audit.jsonl
+Local audit log with redacted secrets.
+.TP
+.I ~/.local/state/synadm-tui/demo-server.json
+Default local demo backend state.
+.SH SEE ALSO
+.BR synadm (1)
+.SH AUTHOR
+synadm-tui contributors

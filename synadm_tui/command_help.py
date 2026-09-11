@@ -78,6 +78,7 @@ DESCRIPTIONS = {
     "Token löschen": "Löscht ein Registrierungstoken.",
     "Darstellung / Thema wählen": "Wechselt Farbschema und Startgrafik der aktuellen Edition.",
     "Audit-Protokoll anzeigen": "Zeigt die lokale Befehlschronik; Passwörter und Tokens werden nicht gespeichert.",
+    "Demo-Modus umschalten": "Wechselt im laufenden Programm zwischen echter synadm-Verbindung und lokalem Demo-Backend.",
     "synadm-Erstkonfiguration": "Erstellt oder ersetzt eine geschützte synadm-Konfiguration und testet sie.",
     "synadm installieren/aktualisieren": "Installiert beziehungsweise aktualisiert synadm isoliert über pipx.",
     "synadm deinstallieren": "Entfernt die von pipx verwaltete synadm-Installation.",
@@ -121,6 +122,7 @@ EXAMPLES = {
     "synadm-Erstkonfiguration": "c drücken und den neun Schritten folgen",
     "Darstellung / Thema wählen": "t drücken, Thema auswählen, Enter",
     "Audit-Protokoll anzeigen": "~/.local/state/synadm-tui/audit.jsonl",
+    "Demo-Modus umschalten": "d drücken oder diesen Menüpunkt öffnen",
 }
 
 WRITE_TITLES = {

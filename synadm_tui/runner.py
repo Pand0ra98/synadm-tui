@@ -46,6 +46,10 @@ class SynadmRunner:
             return Path(self.executable).is_file() and os.access(self.executable, os.X_OK)
         return shutil.which(self.executable) is not None
 
+    @property
+    def demo_mode(self) -> bool:
+        return False
+
     def build_command(self, args: Sequence[str], *, structured: bool = True) -> list[str]:
         command = [self.executable, "--batch"]
         if structured and "--help" not in args and "-h" not in args and "config" not in args:

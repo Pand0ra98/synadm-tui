@@ -136,16 +136,19 @@ def populate_payload(stage: Path, edition: Edition) -> None:
     doc_dir = stage / "usr" / "share" / "doc" / edition.package
     applications_dir = stage / "usr" / "share" / "applications"
     icon_dir = stage / "usr" / "share" / "pixmaps"
+    man_dir = stage / "usr" / "share" / "man" / "man1"
     binary_dir.mkdir(parents=True)
     doc_dir.mkdir(parents=True)
     applications_dir.mkdir(parents=True)
     icon_dir.mkdir(parents=True)
+    man_dir.mkdir(parents=True)
     shutil.copy2(DIST / edition.executable, binary_dir / edition.executable)
     (binary_dir / edition.executable).chmod(0o755)
     shutil.copy2(ROOT / "README.md", doc_dir / "README.md")
     shutil.copy2(ROOT / "LICENSE", doc_dir / "copyright")
     (applications_dir / f"{edition.package}.desktop").write_text(desktop_entry(edition), encoding="utf-8")
     shutil.copy2(edition.icon_source, icon_dir / f"{edition.package}.png")
+    shutil.copy2(ROOT / "packaging" / "man" / f"{edition.executable}.1", man_dir / f"{edition.executable}.1")
 
 
 def normalize_permissions(stage: Path, executable: str) -> None:
@@ -187,6 +190,7 @@ Source1:        README.md
 Source2:        LICENSE
 Source3:        {edition.package}.desktop
 Source4:        {edition.package}.png
+Source5:        {edition.executable}.1
 BuildArch:      {rpm_arch}
 Requires:       glibc >= 2.34
 Requires:       zlib
@@ -209,11 +213,13 @@ install -Dpm 0644 %{{SOURCE1}} %{{buildroot}}%{{_docdir}}/{edition.package}/READ
 install -Dpm 0644 %{{SOURCE2}} %{{buildroot}}%{{_licensedir}}/{edition.package}/LICENSE
 install -Dpm 0644 %{{SOURCE3}} %{{buildroot}}%{{_datadir}}/applications/{edition.package}.desktop
 install -Dpm 0644 %{{SOURCE4}} %{{buildroot}}%{{_datadir}}/pixmaps/{edition.package}.png
+install -Dpm 0644 %{{SOURCE5}} %{{buildroot}}%{{_mandir}}/man1/{edition.executable}.1
 
 %files
 %{{_bindir}}/{edition.executable}
 %{{_datadir}}/applications/{edition.package}.desktop
 %{{_datadir}}/pixmaps/{edition.package}.png
+%{{_mandir}}/man1/{edition.executable}.1*
 %doc %{{_docdir}}/{edition.package}/README.md
 %license %{{_licensedir}}/{edition.package}/LICENSE
 
@@ -241,6 +247,7 @@ def build_rpm(version: str, rpm_arch: str) -> list[Path]:
         shutil.copy2(DIST / edition.executable, topdir / "SOURCES" / edition.executable)
         (topdir / "SOURCES" / f"{edition.package}.desktop").write_text(desktop_entry(edition), encoding="utf-8")
         shutil.copy2(edition.icon_source, topdir / "SOURCES" / f"{edition.package}.png")
+        shutil.copy2(ROOT / "packaging" / "man" / f"{edition.executable}.1", topdir / "SOURCES" / f"{edition.executable}.1")
         spec = topdir / "SPECS" / f"{edition.package}.spec"
         spec.write_text(rpm_spec(edition, version, rpm_arch), encoding="utf-8")
         command = [

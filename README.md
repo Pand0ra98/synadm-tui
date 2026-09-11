@@ -45,6 +45,7 @@ python3 -m synadm_tui
 - geführter CSV-Import mit Trennzeichenerkennung, Spaltenzuordnung und Vorschau
 - Moderationsassistenten für Kontosperren, Shadow-Bans, Geräte und Nachrichtenredaktion
 - Raumwerkzeuge für Beitritt, Administratorrechte, Blockierung, Löschstatus und leere Räume
+- lokaler Demo-Modus mit JSON-Speicher für Entwicklung und Vorführungen ohne Synapse-Server
 - TUI selbst nur mit Python-Standardbibliothek; die Systempakete bringen zusätzlich die Basis für `synadm`/`pipx` und TLS mit
 
 ## Voraussetzungen
@@ -80,6 +81,48 @@ Alternative Programm- oder Konfigurationspfade:
 synadm-tui --synadm /opt/synadm/bin/synadm \
   --config-file ~/.config/synadm.yaml --timeout 90
 ```
+
+## Lokaler Demo-Modus ohne Synapse-Server
+
+Für Entwicklung, Vorführungen und UI-Tests kann die TUI mit einem lokalen Demo-Backend gestartet werden:
+
+```bash
+synadm-tui --demo
+```
+
+Im laufenden Programm kann der Demo-Modus jederzeit mit `d` oder über
+**Weitere → Demo-Modus umschalten** ein- und ausgeschaltet werden. Beim
+Einschalten erscheint in der Kopfzeile `// D E M O`; beim Ausschalten werden
+Befehle wieder über die konfigurierte echte `synadm`-Verbindung ausgeführt.
+
+Der Demo-Modus legt keine Daten auf einem echten Matrix/Synapse-Server an. Stattdessen speichert er Benutzer, Räume und Registrierungstokens in einer lokalen JSON-Datei:
+
+```text
+~/.local/state/synadm-tui/demo-server.json
+```
+
+Damit lassen sich typische Workflows ohne Admin-Token und ohne Netzwerk testen:
+
+- Benutzer einzeln anlegen
+- Benutzer per CSV importieren
+- Benutzer suchen, anzeigen, sperren oder deaktivieren
+- Räume über den Raumassistenten anlegen
+- Raumlisten, Mitglieder und Blockierungsstatus anzeigen
+
+Für reproduzierbare Tests kann der Speicherort explizit gesetzt werden:
+
+```bash
+synadm-tui --demo --demo-state /tmp/synadm-tui-demo.json
+```
+
+Alternativ kann das Fake-Backend auch direkt als `synadm`-Ersatz verwendet werden:
+
+```bash
+./tools/fake_synadm.py --batch --output json user list
+python3 -m synadm_tui --synadm ./tools/fake_synadm.py
+```
+
+Das Demo-Backend implementiert bewusst nur eine nützliche Teilmenge von `synadm`. Nicht implementierte Befehle melden einen verständlichen Fehler, anstatt eine echte Serververbindung zu versuchen.
 
 ## Einzelne ausführbare Datei bauen
 
@@ -134,7 +177,7 @@ dist/packages/synadm-tui-thueringen-<VERSION>-1.<ARCH>.rpm
 
 Die Build-Architektur wird automatisch auf `amd64`/`x86_64` beziehungsweise `arm64`/`aarch64` abgebildet. Das Skript verweigert die Paketierung, wenn die Versionsnummer einer nativen Datei nicht zu `pyproject.toml` passt.
 
-Die DEB- und RPM-Pakete installieren außerdem je Edition einen grafischen Starter unter `/usr/share/applications/` sowie ein Icon unter `/usr/share/pixmaps/`. Dadurch erscheinen **synadm TUI** und **synadm TUI Thüringen** im Startmenü beziehungsweise Application-Launcher grafischer Linux-Desktops. Eine persönliche Desktop-Verknüpfung kann daraus bei Bedarf kopiert werden:
+Die DEB- und RPM-Pakete installieren außerdem je Edition einen grafischen Starter unter `/usr/share/applications/`, ein Icon unter `/usr/share/pixmaps/` und eine Manpage unter `/usr/share/man/man1/`. Dadurch erscheinen **synadm TUI** und **synadm TUI Thüringen** im Startmenü beziehungsweise Application-Launcher grafischer Linux-Desktops. Hilfe ist nach der Installation auch direkt über `man synadm-tui` beziehungsweise `man synadm-tui-thueringen` verfügbar. Eine persönliche Desktop-Verknüpfung kann daraus bei Bedarf kopiert werden:
 
 ```bash
 cp /usr/share/applications/synadm-tui.desktop ~/Desktop/
@@ -190,9 +233,9 @@ sudo apt install synadm-tui
 ```
 
 APT wählt automatisch die neueste verfügbare Version. Eine Versionsangabe wie
-`synadm-tui=0.21` ist für die normale Installation nicht erforderlich.
+`synadm-tui=0.22` ist für die normale Installation nicht erforderlich.
 
-Dieser Ablauf wurde mit Version 0.21 in einer isolierten APT-Umgebung geprüft: Signaturprüfung, Paketauflösung, Download, Dateirechte und Programmstart waren erfolgreich.
+Dieser Ablauf wurde mit Version 0.22 in einer isolierten APT-Umgebung geprüft: Signaturprüfung, Paketauflösung, Download, Dateirechte und Programmstart waren erfolgreich.
 
 Fedora, RHEL und kompatible Systeme:
 
@@ -225,6 +268,7 @@ Standard Edition und Thüringen Edition werden im selben Repository gepflegt. De
 | `f` | Befehle über alle Bereiche filtern |
 | `?` | Tastaturhilfe anzeigen |
 | `t` | Themenauswahl öffnen |
+| `d` | Demo-Modus ein- beziehungsweise ausschalten |
 | `Shift+Tab` | Im Assistenten einen Schritt zurückgehen |
 | `PgUp` / `PgDn`, `Home` | Ausgabe scrollen |
 | `v` | Aktuelle Ergebnistabelle filtern beziehungsweise Filter entfernen |

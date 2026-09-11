@@ -4,6 +4,7 @@ import unittest
 
 import synadm_tui
 from synadm_tui.app import App
+from synadm_tui.fake_synadm import FakeSynadmRunner
 from synadm_tui.runner import SynadmRunner
 from synadm_tui_thueringen import __version__
 from synadm_tui_thueringen.theme import THURINGIA_EDITION, THURINGIA_THEME
@@ -22,6 +23,10 @@ class ThueringenEditionTests(unittest.TestCase):
         app = App(SynadmRunner("not-installed"), THURINGIA_EDITION, (THURINGIA_THEME,))
         self.assertEqual(app.theme.key, "thuringia")
         self.assertEqual(app.edition.binary_name, "synadm-tui-thueringen")
+
+    def test_thueringen_edition_marks_demo_mode_in_header(self) -> None:
+        app = App(FakeSynadmRunner(), THURINGIA_EDITION, (THURINGIA_THEME,))
+        self.assertIn("D E M O", app.brand)
 
 
 if __name__ == "__main__":
